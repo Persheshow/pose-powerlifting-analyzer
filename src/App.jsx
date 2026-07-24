@@ -75,8 +75,13 @@ export default function App() {
     validReps: ripetizioniValide,
   } = usePose(esercizioScelto, allenamentoAvviato, cameraLato, staRegistrando, aggiungiLogRipetizione, modalitaAcquisizione === 'file' ? videoUrl : null);
 
-  const { startRecording: avviaRegistrazione, stopRecording: fermaRegistrazione } =
-    useVideoRecorder(canvasRef, setStaRegistrando);
+  const {
+    startRecording: avviaRegistrazione,
+    stopRecording: fermaRegistrazione,
+    pendingRecording,
+    confermaDownload,
+    scartaRegistrazione,
+  } = useVideoRecorder(canvasRef, setStaRegistrando);
 
   const suonaBeep = () => {
     try {
@@ -106,6 +111,17 @@ export default function App() {
   useEffect(() => {
     if (ripetizioniValide > 0) suonaBeep();
   }, [ripetizioniValide]);
+
+  // Se l'utente non conferma né ignora entro 20s, scartiamo automaticamente:
+  // evita di lasciare per sempre in memoria un Blob video non richiesto se
+  // l'atleta si allontana senza guardare lo schermo.
+  useEffect(() => {
+    if (!pendingRecording) return;
+    const timerId = setTimeout(() => {
+      scartaRegistrazione();
+    }, 20000);
+    return () => clearTimeout(timerId);
+  }, [pendingRecording, scartaRegistrazione]);
 
   useEffect(() => {
     async function trovaFotocamere() {
@@ -344,6 +360,28 @@ export default function App() {
         <p className="text-[15px] uppercase tracking-wider">Corso di Laurea in Informatica</p>
         <p className="text-[15px] uppercase tracking-wider opacity-70">A.A. 2025/2026</p>
       </footer>
+      {pendingRecording && (
+        <div className="fixed inset-x-0 bottom-0 z-50 bg-white border-t-2 border-[#002f6c] p-4 shadow-2xl">
+          <div className="w-full max-w-xl mx-auto flex items-center justify-between gap-4">
+            <p className="text-xs uppercase tracking-widest">Registrazione pronta</p>
+            <div className="flex gap-2 shrink-0">
+              <button
+                onClick={scartaRegistrazione}
+                className="px-4 py-2 text-xs uppercase tracking-widest border border-[#002f6c] text-[#002f6c] rounded-none transition-none hover:bg-[#002f6c] hover:text-white"
+              >
+                Ignora
+              </button>
+              <button
+                onClick={confermaDownload}
+                className="px-4 py-2 text-xs uppercase tracking-widest border border-[#002f6c] bg-[#002f6c] text-white rounded-none transition-none hover:bg-white hover:text-[#002f6c]"
+              >
+                Scarica Video
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <SpeedInsights />
     </div>
   );
