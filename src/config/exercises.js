@@ -88,4 +88,10 @@ export const ENGINE = {
   HUD_INVALID_MS: 2000,
   // Durata del watermark "RALLENTA L'ESECUZIONE" impresso nel video esportato.
   WATERMARK_MS: 2500,
+  CAMERA_WIDTH_IDEAL: 1280,
+  CAMERA_HEIGHT_IDEAL: 720,
+  // Bitrate video richiesto a MediaRecorder per l'esportazione. Senza questo
+  // valore esplicito il browser applica un default spesso conservativo per
+  // gli stream generati da canvas, con visibili artefatti di compressione.
+  RECORDING_BITRATE: 8_000_000, // 8 Mbps
 };

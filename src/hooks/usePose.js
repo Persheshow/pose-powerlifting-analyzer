@@ -17,7 +17,6 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, logC
   const ultimoTempoVideoRef = useRef(-1);
   const ginocchioYSmoothRef = useRef(null);
   const registrazioneRef = useRef(registrazioneAttiva);
-
   // Cache per renderizzare lo scheletro anche a video in pausa
   const ultimoPuntiRef = useRef(null);
   const ultimoLatoRef = useRef('LEFT');
@@ -109,7 +108,14 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, logC
     else {
       async function avviaFotocamera() {
         try {
-          const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: latoCamera }, audio: false });
+          const stream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              facingMode: latoCamera,
+              width: { ideal: ENGINE.CAMERA_WIDTH_IDEAL },
+              height: { ideal: ENGINE.CAMERA_HEIGHT_IDEAL },
+            },
+            audio: false,
+          });
           if (elVideo) {
             elVideo.srcObject = stream;
             elVideo.onloadedmetadata = () => elVideo.play();

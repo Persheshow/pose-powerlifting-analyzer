@@ -1,4 +1,5 @@
 import { useRef, useCallback, useState } from 'react';
+import { ENGINE } from '../config/exercises';
 
 /**
  * Formati preferiti in ordine, dal più efficiente al più compatibile.
@@ -53,10 +54,11 @@ export function useVideoRecorder(canvasRef, setIsRecording) {
 
         try {
             registratoreRef.current = tipoSupportato
-                ? new MediaRecorder(flusso, { mimeType: tipoSupportato })
-                : new MediaRecorder(flusso);
+                ? new MediaRecorder(flusso, { mimeType: tipoSupportato, videoBitsPerSecond: ENGINE.RECORDING_BITRATE })
+                : new MediaRecorder(flusso, { videoBitsPerSecond: ENGINE.RECORDING_BITRATE });
         } catch {
-            // Ultima spiaggia: nessuna opzione esplicita, il browser sceglie da sé.
+            // Ultima spiaggia: nessuna opzione esplicita, il browser sceglie da sé
+            // sia il formato che il bitrate.
             registratoreRef.current = new MediaRecorder(flusso);
             tipoScelroRef.current = null;
         }
