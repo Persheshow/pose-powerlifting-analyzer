@@ -44,6 +44,7 @@ export function useVideoRecorder(canvasRef, setIsRecording) {
     // senza alcun avviso. Il banner di conferma viene invece renderizzato in
     // App.jsx come componente React normale, non bloccante.
     const [pendingRecording, setPendingRecording] = useState(null);
+    const pendingRecordingRef = useRef(null);
 
     const startRecording = useCallback(() => {
         if (!canvasRef.current) return;
@@ -76,8 +77,9 @@ export function useVideoRecorder(canvasRef, setIsRecording) {
                 const fileVideo = new Blob(pezziVideoRef.current, { type: tipoPulito });
                 const estensione = estensioneDaTipo(tipoEffettivo);
                 const nomeFile = `analisi_cinematica_${new Date().toISOString().slice(0, 10)}.${estensione}`;
-
-                setPendingRecording({ blob: fileVideo, filename: nomeFile });
+                const registrazione = { blob: fileVideo, filename: nomeFile };
+                pendingRecordingRef.current = registrazione;
+                setPendingRecording(registrazione);
             }
 
             pezziVideoRef.current = [];
@@ -96,28 +98,29 @@ export function useVideoRecorder(canvasRef, setIsRecording) {
     }, [setIsRecording]);
 
     const confermaDownload = useCallback(() => {
-        setPendingRecording((corrente) => {
-            if (!corrente) return null;
+        const corrente = pendingRecordingRef.current;
+        if (!corrente) return;
 
-            const linkTemp = URL.createObjectURL(corrente.blob);
-            const tagA = document.createElement('a');
-            tagA.style.display = 'none';
-            tagA.href = linkTemp;
-            tagA.download = corrente.filename;
+        const linkTemp = URL.createObjectURL(corrente.blob);
+        const tagA = document.createElement('a');
+        tagA.style.display = 'none';
+        tagA.href = linkTemp;
+        tagA.download = corrente.filename;
 
-            document.body.appendChild(tagA);
-            tagA.click();
+        document.body.appendChild(tagA);
+        tagA.click();
 
-            setTimeout(() => {
-                document.body.removeChild(tagA);
-                URL.revokeObjectURL(linkTemp);
-            }, 100);
+        setTimeout(() => {
+            document.body.removeChild(tagA);
+            URL.revokeObjectURL(linkTemp);
+        }, 100);
 
-            return null;
-        });
+        pendingRecordingRef.current = null;
+        setPendingRecording(null);
     }, []);
 
     const scartaRegistrazione = useCallback(() => {
+        pendingRecordingRef.current = null;
         setPendingRecording(null);
     }, []);
 
