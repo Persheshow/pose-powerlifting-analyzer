@@ -24,8 +24,8 @@ The project is divided into four logical modules:
 To run the application in a local development environment, you must have [Node.js](https://nodejs.org/) installed.
 
 1. Clone the repository:
-   ```bash
-   git clone [https://github.com/YourUsername/powerlifting-kinematics-vision.git]
+```bash
+git clone [https://github.com/YourUsername/powerlifting-kinematics-vision.git]
 
 ```
 
