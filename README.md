@@ -6,7 +6,7 @@
 
 Web application for real-time kinematic analysis and automatic recognition of valid repetitions in fundamental powerlifting exercises (Squat, Deadlift, Overhead Press).
 
-![Application Preview](./docs/screenshot.png)
+![Application Preview](./docs/screenshot1.png)
 ![Application Preview](./docs/screenshot2.png)
 ![Application Preview](./docs/screenshot3.png)
 
