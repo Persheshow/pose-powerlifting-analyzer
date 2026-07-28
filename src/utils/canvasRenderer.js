@@ -42,6 +42,7 @@ export function drawSkeleton(ctx, landmarks, w, h, isTargetReached, side, ex, ha
 
     if (puntoEvidenziato && puntoEvidenziato.visibility > 0.2) {
         ctx.beginPath();
+        // Il pallino cambia colore in base alla validazione della FSM
         ctx.fillStyle = isTargetReached ? '#00ff88' : '#ef4444';
         ctx.arc(puntoEvidenziato.x * w, puntoEvidenziato.y * h, 6, 0, 2 * Math.PI);
         ctx.fill();
@@ -52,19 +53,8 @@ export function drawSkeleton(ctx, landmarks, w, h, isTargetReached, side, ex, ha
 }
 
 export function drawSquatOverlays(ctx, w, h, kneePoint, isTargetReached, smoothedKneeYRef) {
-    if (kneePoint && kneePoint.visibility > 0.2) {
-        if (smoothedKneeYRef.current === null) smoothedKneeYRef.current = kneePoint.y;
-        else smoothedKneeYRef.current = (kneePoint.y * 0.15) + (smoothedKneeYRef.current * 0.85);
-        const yGinocchio = smoothedKneeYRef.current * h;
-        ctx.beginPath();
-        ctx.setLineDash([8, 6]);
-        ctx.moveTo(0, yGinocchio);
-        ctx.lineTo(w, yGinocchio);
-        ctx.lineWidth = 2;
-        ctx.strokeStyle = '#00ff88';
-        ctx.stroke();
-        ctx.setLineDash([]);
-    }
+    // Funzione svuotata: la linea del parallelo non viene più disegnata.
+    // La lasciamo dichiarata per non rompere le chiamate da usePose.js.
 }
 
 export function drawHUD(ctx, w, h, validReps, hudMessage, isTrackingLost, currentAngle) {
@@ -79,6 +69,7 @@ export function drawHUD(ctx, w, h, validReps, hudMessage, isTrackingLost, curren
     ctx.fillText(`ANGOLO: ${currentAngle ? Math.round(currentAngle) + '°' : '--'}`, w - 20, 34);
     ctx.textAlign = "center";
     const adesso = performance.now();
+
     if (isTrackingLost) {
         ctx.fillStyle = "rgba(239, 68, 68, 0.9)";
         ctx.fillRect(0, 50, w, 40);
