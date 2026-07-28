@@ -9,7 +9,7 @@ Web application for real-time kinematic analysis and automatic recognition of va
 ![Application Preview](./docs/screenshot.png)
 
 ## Project Description
-This software tracks human topological landmarks directly in the browser (client-side), without sending video frames to external servers. The objective is to validate powerlifting lifts by comparing the user's joint angles with the thresholds established by standard sports regulations.
+This software tracks human topological landmarks directly in the browser, without sending video frames to external servers. The objective is to validate powerlifting lifts by comparing the user's joint angles with the thresholds established by standard sports regulations.
 
 ## System Architecture
 The project is divided into four logical modules:
@@ -78,7 +78,3 @@ Graduation Date: October 21, 2026
 
 * **Student:** Lorenzo Napolitano - lorenzo.napolitano@edu.unifi.it
 * **Thesis Supervisor:** Michele Ginolfi - michele.ginolfi@unifi.it
-
-```
-
-```
