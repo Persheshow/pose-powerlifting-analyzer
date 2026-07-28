@@ -35,6 +35,7 @@ export function useVideoRecorder(canvasRef, setIsRecording) {
     const pezziVideoRef = useRef([]);
     const vuoleSalvareRef = useRef(true);
     const tipoScelroRef = useRef(null);
+    const riepilogoRef = useRef(null);
 
     // Video pronto per essere scaricato, in attesa di conferma dall'utente.
     // NB: niente più window.confirm(). Su Safari/iOS un dialog nativo chiamato
@@ -77,7 +78,7 @@ export function useVideoRecorder(canvasRef, setIsRecording) {
                 const fileVideo = new Blob(pezziVideoRef.current, { type: tipoPulito });
                 const estensione = estensioneDaTipo(tipoEffettivo);
                 const nomeFile = `analisi_cinematica_${new Date().toISOString().slice(0, 10)}.${estensione}`;
-                const registrazione = { blob: fileVideo, filename: nomeFile };
+                const registrazione = { blob: fileVideo, filename: nomeFile, riepilogo: riepilogoRef.current };
                 pendingRecordingRef.current = registrazione;
                 setPendingRecording(registrazione);
             }
@@ -89,9 +90,10 @@ export function useVideoRecorder(canvasRef, setIsRecording) {
         setIsRecording(true);
     }, [canvasRef, setIsRecording]);
 
-    const stopRecording = useCallback((salvaVideo = true) => {
+    const stopRecording = useCallback((salvaVideo = true, riepilogo = null) => {
         if (registratoreRef.current && registratoreRef.current.state === "recording") {
             vuoleSalvareRef.current = salvaVideo;
+            riepilogoRef.current = riepilogo;
             registratoreRef.current.stop();
             setIsRecording(false);
         }

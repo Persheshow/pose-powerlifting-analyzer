@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { usePose } from './hooks/usePose';
 import { useVideoRecorder } from './hooks/useVideoRecorder';
 import logoUnifi from './assets/logo_unifi.png';
@@ -44,7 +44,6 @@ export default function App() {
   const [allenamentoAvviato, setAllenamentoAvviato] = useState(false);
   const [cameraLato, setCameraLato] = useState(isMobileDevice() ? 'environment' : 'user');
   const [cameraDoppia, setCameraDoppia] = useState(false);
-  const [logSessione, setLogSessione] = useState([]);
   const [staRegistrando, setStaRegistrando] = useState(false);
   const [infoModaleAperto, setInfoModaleAperto] = useState(false);
 
@@ -54,11 +53,6 @@ export default function App() {
 
   // Stato per il timer pre-start
   const [contoAllaRovescia, setContoAllaRovescia] = useState(null);
-
-  const aggiungiLogRipetizione = useCallback((nuovoLog) => {
-    setLogSessione(prev => [...prev, nuovoLog]);
-  }, []);
-
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (file) {
@@ -73,7 +67,8 @@ export default function App() {
     isLoading: caricamentoModello,
     error: erroreModello,
     validReps: ripetizioniValide,
-  } = usePose(esercizioScelto, allenamentoAvviato, cameraLato, staRegistrando, aggiungiLogRipetizione, modalitaAcquisizione === 'file' ? videoUrl : null);
+    noReps: ripetizioniNonValide,
+  } = usePose(esercizioScelto, allenamentoAvviato, cameraLato, staRegistrando, modalitaAcquisizione === 'file' ? videoUrl : null);
 
   const {
     startRecording: avviaRegistrazione,
@@ -282,7 +277,7 @@ export default function App() {
             <button
               onClick={() => {
                 if (staRegistrando) {
-                  fermaRegistrazione(true);
+                  fermaRegistrazione(true, { valide: ripetizioniValide, nonValide: ripetizioniNonValide });
                   if (modalitaAcquisizione === 'file' && videoRef.current) videoRef.current.pause();
                 } else if (contoAllaRovescia === null) {
                   if (modalitaAcquisizione === 'live') {
@@ -312,34 +307,6 @@ export default function App() {
         </div>
       )}
 
-      {allenamentoAvviato && logSessione.length > 0 && (
-        <div className="w-full max-w-xl flex flex-col gap-6 mt-8">
-          <section className="bg-white border border-[#002f6c] rounded-none overflow-hidden">
-            <div className="bg-white border-b border-[#002f6c] px-5 py-4 flex items-center justify-between">
-              <h2 className="text-xs uppercase tracking-widest">Registro Acquisizioni</h2>
-              <span className="text-[10px] uppercase tracking-wider border border-[#002f6c] px-2.5 py-1 rounded-none">TOTALE: {logSessione.length}</span>
-            </div>
-            <div className="flex flex-col">
-              {logSessione.slice(-10).reverse().map((riga, idx) => (
-                <div key={`${riga.timestamp}-${idx}`} className="flex items-center justify-between px-5 py-3 text-sm border-b border-[#002f6c] last:border-b-0">
-                  <div className="flex items-center gap-4">
-                    <div className="flex flex-col">
-                      <span className="text-[10px] uppercase tracking-widest">{riga.time}</span>
-                      <span className="uppercase tracking-widest text-xs mt-1">{riga.ex === 'SQUAT' ? 'Squat' : riga.ex === 'DEADLIFT' ? 'Stacco' : 'Pressa'}</span>
-                    </div>
-                  </div>
-                  <div className="flex flex-col items-end">
-                    <span className="text-xs uppercase tracking-wider">{riga.esito === 'VALID_REP' ? 'VALIDA' : 'NON VALIDA'}</span>
-                    {riga.errori !== 'Nessuno' && <span className="text-[10px] uppercase mt-1">{riga.errori}</span>}
-                  </div>
-                </div>
-              ))}
-              {logSessione.length > 10 && <div className="px-5 py-3 text-center text-[10px] border-t border-[#002f6c] uppercase tracking-widest">Visualizzati gli ultimi 10 record della sessione attiva.</div>}
-            </div>
-          </section>
-        </div>
-      )}
-
       {allenamentoAvviato && (
         <footer className="w-full max-w-xl mt-6 mb-8 flex flex-col gap-4">
           <button
@@ -363,7 +330,14 @@ export default function App() {
       {pendingRecording && (
         <div className="fixed inset-x-0 bottom-0 z-50 bg-white border-t-2 border-[#002f6c] p-4 shadow-2xl">
           <div className="w-full max-w-xl mx-auto flex items-center justify-between gap-4">
-            <p className="text-xs uppercase tracking-widest">Registrazione pronta</p>
+            <div className="flex flex-col gap-0.5">
+              <p className="text-xs uppercase tracking-widest">Registrazione pronta</p>
+              {pendingRecording.riepilogo && (
+                <p className="text-[10px] uppercase tracking-wider opacity-70">
+                  {pendingRecording.riepilogo.valide} valide &middot; {pendingRecording.riepilogo.nonValide} non valide
+                </p>
+              )}
+            </div>
             <div className="flex gap-2 shrink-0">
               <button
                 onClick={scartaRegistrazione}

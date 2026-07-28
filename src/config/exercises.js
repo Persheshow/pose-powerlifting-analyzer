@@ -29,7 +29,7 @@ export const ESERCIZI = {
   },
   OVERHEAD_PRESS: {
     thresholds: {
-      topElbow: 160, bottomElbow: 140, minAttemptElbow: 130,
+      topElbow: 155, bottomElbow: 140, minAttemptElbow: 130,
       minRepDurationMs: 800, cooldownMs: 800,
     },
     landmarks: {

@@ -5,7 +5,7 @@ import { drawSkeleton, drawSquatOverlays, drawHUD } from '../utils/canvasRendere
 import { determinaLatoInquadrato } from '../utils/poseUtils';
 import { ESERCIZI, ENGINE } from '../config/exercises';
 
-export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, logCallback, videoUrl) {
+export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, videoUrl) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const modelloRef = useRef(null);
@@ -213,20 +213,6 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, logC
                 setFaults(event.faults);
                 messaggioHudRef.current = { type: 'INVALID', text: `NO REP: ${event.faults.join(' - ')}`, expires: performance.now() + ENGINE.HUD_INVALID_MS };
               }
-
-              const adesso = new Date();
-              if (logCallback) {
-                logCallback({
-                  timestamp: adesso.toISOString(),
-                  time: adesso.toLocaleTimeString('it-IT', { hour12: false }),
-                  ex: esercizio,
-                  side: latoRilevato,
-                  esito: event.type,
-                  primaryAngle: primaryAngle === null ? '' : Math.round(primaryAngle),
-                  finalState: statoRepRef.current.movementState,
-                  errori: event.faults?.length ? event.faults.join(' - ') : 'Nessuno',
-                });
-              }
             }
           } else {
             framePersiRef.current++;
@@ -274,7 +260,7 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, logC
 
     frameIdRef.current = requestAnimationFrame(ciclo);
     return () => { if (frameIdRef.current) cancelAnimationFrame(frameIdRef.current); };
-  }, [esercizio, attivo, latoCamera, videoUrl, logCallback]);
+  }, [esercizio, attivo, latoCamera, videoUrl]);
 
   function reset() {
     statoRepRef.current = createInitialState();
