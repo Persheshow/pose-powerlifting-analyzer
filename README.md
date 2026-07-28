@@ -26,40 +26,59 @@ To run the application in a local development environment, you must have [Node.j
 1. Clone the repository:
    ```bash
    git clone [https://github.com/YourUsername/powerlifting-kinematics-vision.git]
-Navigate to the project directory:
 
-Bash
+```
+
+2. Navigate to the project directory:
+```bash
 cd powerlifting-kinematics-vision
-Install the dependencies:
 
-Bash
+```
+
+
+3. Install the dependencies:
+```bash
 npm install
-Start the development server:
 
-Bash
+```
+
+
+4. Start the development server:
+```bash
 npm run dev
-App User Guide
-Acquisition Modes
+
+```
+
+
+
+## App User Guide
+
+### Acquisition Modes
+
 The application supports two video input streams:
 
-Camera (Live): Utilizes the computer's webcam or the mobile device's camera (front/rear). Pressing "INIZIA ESERCIZIO" (START EXERCISE) triggers a 3-second calibration timer on the screen, allowing the user to position themselves correctly within the frame.
+1. **Camera (Live):** Utilizes the computer's webcam or the mobile device's camera (front/rear). Pressing "INIZIA ESERCIZIO" (START EXERCISE) triggers a 3-second calibration timer on the screen, allowing the user to position themselves correctly within the frame.
+2. **Upload Video (File):** Allows the upload of pre-recorded `.mp4` or `.webm` files. The analysis starts immediately upon pressing the start button.
 
-Upload Video (File): Allows the upload of pre-recorded .mp4 or .webm files. The analysis starts immediately upon pressing the start button.
+### Visual Feedback Functionality
 
-Visual Feedback Functionality
 During the analysis, a graphical overlay displays the user's skeleton. The system provides instantaneous feedback via a circular indicator positioned on the key joint for the selected exercise (hip for Squat and Deadlift, elbow for Overhead Press).
 
-Red Color: Movement in progress; the geometric threshold has not yet been reached.
-
-Green Color: Angle validated by the Finite State Machine (e.g., breaking the parallel in the squat or complete lockout in the deadlift). The point maintains the green color for the duration of the cooldown, confirming the validity of the repetition.
+* **Red Color:** Movement in progress; the geometric threshold has not yet been reached.
+* **Green Color:** Angle validated by the Finite State Machine (e.g., breaking the parallel in the squat or complete lockout in the deadlift). The point maintains the green color for the duration of the cooldown, confirming the validity of the repetition.
 
 The upper HUD interface displays the total count of valid repetitions and the angle measured in real-time. Invalid executions are recorded in the bottom session log, specifying the cause of the error.
 
-Academic Context
+## Academic Context
+
 Project developed for the Bachelor's Degree in Computer Science Thesis.
 
-University of Florence (Università degli Studi di Firenze)
+**University of Florence (Università degli Studi di Firenze)**
 Graduation Date: October 21, 2026
 
-Student: Lorenzo Napolitano - lorenzo.napolitano@edu.unifi.it
-Thesis Supervisor: Michele Ginolfi - michele.ginolfi@unifi.it
+* **Student:** Lorenzo Napolitano - lorenzo.napolitano@edu.unifi.it
+* **Thesis Supervisor:** Michele Ginolfi - michele.ginolfi@unifi.it
+
+```
+
+```
