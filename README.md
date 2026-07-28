@@ -1,66 +1,67 @@
-# Real-Time Kinematic Analysis via Computer Vision
+# Powerlifting Kinematics Vision
 
-[🇮🇹 Leggi in Italiano](README.it.md) | [🇬🇧 Read in English](README.md)
+![React](https://img.shields.io/badge/react-%2320232a.svg?style=for-the-badge&logo=react&logoColor=%2361DAFB)
+![Vite](https://img.shields.io/badge/vite-%23646CFF.svg?style=for-the-badge&logo=vite&logoColor=white)
+![MediaPipe](https://img.shields.io/badge/MediaPipe-00B4D8?style=for-the-badge)
 
-Software project developed for the biomechanical monitoring and validation of strength exercises (Powerlifting) through the use of Computer Vision. The architecture leverages MediaPipe Pose Landmarker for topological user estimation and implements a set of Finite State Machines (FSM) to instantly distinguish valid repetitions (according to IPF standards) from technical compensations.
+Web application for real-time kinematic analysis and automatic recognition of valid repetitions in fundamental powerlifting exercises (Squat, Deadlift, Overhead Press).
 
-The interface, designed with a rigorous institutional look (University of Florence), is optimized for field use on mobile devices (PWA) and ensures local acquisition, processing, and export of telemetry data.
+![Application Preview](./docs/screenshot.png)
+![Application Preview](./docs/screenshot2.png)
+![Application Preview](./docs/screenshot3.png)
 
-## Architecture and Features
+## Project Description
+This software tracks human topological landmarks directly in the browser (client-side), without sending video frames to external servers. The objective is to validate powerlifting lifts by comparing the user's joint angles with the thresholds established by standard sports regulations.
 
-* **Topological Tracking (Pose Estimation)**: Video stream acquisition via the `navigator.mediaDevices` API and extraction of 33 3D body landmarks at 60 FPS.
-* **Edge Inference (Local Execution)**: In-memory allocation of the `.task` neural model and WebAssembly (WASM) modules executed entirely on the client (offloading computation to the local GPU), eliminating latency and ensuring privacy.
-* **Signal Filtering (Smoothing)**: Application of an Exponential Moving Average (EMA) on angular vectors to mitigate high-frequency noise (jittering) typical of optical sensors.
-* **Finite State Machines (FSM)**: Independent logic engines for each lift, designed to track phase transitions (Setup, Eccentric, Concentric, Lockout).
-* **Dynamic Hardware Support**: Automatic detection of optical peripherals (multi-camera) and on-the-fly switching between front and rear sensors without interrupting the analysis thread.
-* **Telemetry-Embedded Video Export (.webm)**: Generation of video recordings via the Canvas and MediaRecorder APIs, capturing the raw camera feed overlaid with the topological skeleton, dynamic HUD, and real-time kinematic data.
+## System Architecture
+The project is divided into four logical modules:
 
-## Biomechanical Models and Regulations (IPF Mode)
+* **Frontend UI (`App.jsx`):** User interface developed in React. It manages exercise selection, file uploading, webcam access, and the display of the acquisition log.
+* **Computer Vision (`usePose.js`):** Module dedicated to the initialization and execution of MediaPipe Pose. It extracts the coordinates (x, y, visibility) of 33 body landmarks for each processed video frame.
+* **Validation Logic (`repLogic.js`):** Implementation of a Finite State Machine (FSM). It calculates joint angles using trigonometric vectors and determines the state of the movement (e.g., `STANDING`, `DESCENDING`, `ASCENDING`, `SETUP`, `LIFTING`). It emits validation events (`VALID_REP` or `NO_REP`) based on predefined tolerance thresholds.
+* **Visual Rendering (`canvasRenderer.js`):** Manages the output on the HTML5 Canvas. It superimposes the vector skeleton onto the original video and changes the color of the primary joint point (red during execution, green upon reaching the geometric target).
 
-### Squat
+## Getting Started
 
-Evaluation relies on lateral profile tracking, calculating the knee angle through vector math (dot product) applied to the hip-knee-ankle kinematic chain.
+To run the application in a local development environment, you must have [Node.js](https://nodejs.org/) installed.
 
-* **Descent Phase**: Triggered by knee flexion relative to the initial lockout vector.
-* **Depth Validation (Parallel)**: Confirmed geometrically when the knee joint closes below the critical angular threshold.
-* **Transition**: Detection of the kinematic inversion point via derivative analysis of the angular buffer.
-* **Invalidation Criteria**: Failure to reach parallel.
+1. Clone the repository:
+   ```bash
+   git clone [https://github.com/YourUsername/powerlifting-kinematics-vision.git](https://github.com/YourUsername/powerlifting-kinematics-vision.git)
+Navigate to the project directory:
 
-### Deadlift
+Bash
+cd powerlifting-kinematics-vision
+Install the dependencies:
 
-The system evaluates combined hip and knee extension, using the wrist's spatial coordinate as a proxy for tracking the barbell trajectory.
-
-* **Setup Phase**: Recording of the wrist's lowest elevation point before the pull.
-* **Lockout**: Simultaneous achievement of target hip and knee extension.
-* **Invalidation Criteria**: Bar descent during the concentric pull phase.
-
-### Overhead Press
-
-The model monitors the elbow's push angle, correlating the data with trunk posture and lower-joint position to detect compensations.
-
-* **Validation (Lockout)**: Full extension of the humerus above the critical threshold.
-* **Invalidation Criteria**: Incomplete range of motion.
-
-## Tech Stack
-
-* **React 19**: UI rendering and reactive state management.
-* **Vite 8**: Build tool and development server.
-* **Tailwind CSS v4**: Utility-first CSS framework.
-* **MediaPipe Tasks Vision**: Pre-trained neural network for Pose Estimation.
-* **vite-plugin-pwa**: Service worker generation for native installation on mobile devices.
-
-## System Requirements
-
-* Node.js (v18+ recommended).
-* Chromium- or WebKit-based browser compatible with the WebGL and `navigator.mediaDevices` APIs.
-* For acquisition: a stabilized camera with a clean, high-contrast lateral framing.
-
-## Installation and Setup
-
-1. Clone the local repository.
-2. Navigate to the root directory from the terminal.
-3. Install the dependency tree:
-```bash
+Bash
 npm install
+Start the development server:
 
-```
+Bash
+npm run dev
+App User Guide
+Acquisition Modes
+The application supports two video input streams:
+
+Camera (Live): Utilizes the computer's webcam or the mobile device's camera (front/rear). Pressing "INIZIA ESERCIZIO" (START EXERCISE) triggers a 3-second calibration timer on the screen, allowing the user to position themselves correctly within the frame.
+
+Upload Video (File): Allows the upload of pre-recorded .mp4 or .webm files. The analysis starts immediately upon pressing the start button.
+
+Visual Feedback Functionality
+During the analysis, a graphical overlay displays the user's skeleton. The system provides instantaneous feedback via a circular indicator positioned on the key joint for the selected exercise (hip for Squat and Deadlift, elbow for Overhead Press).
+
+Red Color: Movement in progress; the geometric threshold has not yet been reached.
+
+Green Color: Angle validated by the Finite State Machine (e.g., breaking the parallel in the squat or complete lockout in the deadlift). The point maintains the green color for the duration of the cooldown, confirming the validity of the repetition.
+
+The upper HUD interface displays the total count of valid repetitions and the angle measured in real-time. Invalid executions are recorded in the bottom session log, specifying the cause of the error.
+
+Academic Context
+Project developed for the Bachelor's Degree in Computer Science Thesis.
+
+University of Florence (Università degli Studi di Firenze)
+Graduation Date: October 21, 2026
+
+Student: Lorenzo Napolitano - lorenzo.napolitano@edu.unifi.it
+Thesis Supervisor: Michele Ginolfi - michele.ginolfi@unifi.it
