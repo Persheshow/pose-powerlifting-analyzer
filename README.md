@@ -6,7 +6,7 @@
 
 Web application for real-time kinematic analysis and automatic recognition of valid repetitions in fundamental powerlifting exercises (Squat, Deadlift, Overhead Press).
 
-![Application Preview](./docs/screenshot3.png)
+![Application Preview](./docs/screenshot.png)
 
 ## Project Description
 This software tracks human topological landmarks directly in the browser (client-side), without sending video frames to external servers. The objective is to validate powerlifting lifts by comparing the user's joint angles with the thresholds established by standard sports regulations.
@@ -25,7 +25,7 @@ To run the application in a local development environment, you must have [Node.j
 
 1. Clone the repository:
    ```bash
-   git clone [https://github.com/YourUsername/powerlifting-kinematics-vision.git](https://github.com/YourUsername/powerlifting-kinematics-vision.git)
+   git clone [https://github.com/YourUsername/powerlifting-kinematics-vision.git]
 Navigate to the project directory:
 
 Bash
