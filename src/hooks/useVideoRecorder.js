@@ -1,21 +1,11 @@
 import { useRef, useCallback, useState } from 'react';
 import { ENGINE } from '../config/exercises';
 
-/**
- * Formati preferiti in ordine, dal più efficiente al più compatibile.
- * Safari (desktop e iOS) non supporta WebM/VP9 in MediaRecorder: usando
- * MediaRecorder.isTypeSupported() scegliamo esplicitamente il primo formato
- * che il browser dichiara di supportare, invece di affidarci a un try/catch
- * "alla cieca" che su Safari fa comunque cadere sul default del browser
- * mentre il resto del codice continua a costruire un file .webm — con il
- * rischio concreto di scaricare un file con estensione sbagliata rispetto
- * al contenuto binario reale.
- */
 const TIPI_PREFERITI = [
     'video/webm;codecs=vp9',
     'video/webm;codecs=vp8',
     'video/webm',
-    'video/mp4', // fallback per Safari/iOS
+    'video/mp4',
 ];
 
 function scegliTipoSupportato() {
@@ -37,13 +27,6 @@ export function useVideoRecorder(canvasRef, setIsRecording) {
     const tipoScelroRef = useRef(null);
     const riepilogoRef = useRef(null);
 
-    // Video pronto per essere scaricato, in attesa di conferma dall'utente.
-    // NB: niente più window.confirm(). Su Safari/iOS un dialog nativo chiamato
-    // da un callback asincrono come onstop (fuori da un gesture context
-    // "fresco") può essere silenziosamente bloccato e restituire false senza
-    // mai apparire a schermo — con il rischio di perdere la registrazione
-    // senza alcun avviso. Il banner di conferma viene invece renderizzato in
-    // App.jsx come componente React normale, non bloccante.
     const [pendingRecording, setPendingRecording] = useState(null);
     const pendingRecordingRef = useRef(null);
 
@@ -59,8 +42,6 @@ export function useVideoRecorder(canvasRef, setIsRecording) {
                 ? new MediaRecorder(flusso, { mimeType: tipoSupportato, videoBitsPerSecond: ENGINE.RECORDING_BITRATE })
                 : new MediaRecorder(flusso, { videoBitsPerSecond: ENGINE.RECORDING_BITRATE });
         } catch {
-            // Ultima spiaggia: nessuna opzione esplicita, il browser sceglie da sé
-            // sia il formato che il bitrate.
             registratoreRef.current = new MediaRecorder(flusso);
             tipoScelroRef.current = null;
         }
@@ -91,13 +72,25 @@ export function useVideoRecorder(canvasRef, setIsRecording) {
     }, [canvasRef, setIsRecording]);
 
     const stopRecording = useCallback((salvaVideo = true, riepilogo = null) => {
-        if (registratoreRef.current && registratoreRef.current.state === "recording") {
+        if (registratoreRef.current && (registratoreRef.current.state === "recording" || registratoreRef.current.state === "paused")) {
             vuoleSalvareRef.current = salvaVideo;
             riepilogoRef.current = riepilogo;
             registratoreRef.current.stop();
             setIsRecording(false);
         }
     }, [setIsRecording]);
+
+    const pausaRegistrazione = useCallback(() => {
+        if (registratoreRef.current && registratoreRef.current.state === "recording") {
+            registratoreRef.current.pause();
+        }
+    }, []);
+
+    const riprendiRegistrazione = useCallback(() => {
+        if (registratoreRef.current && registratoreRef.current.state === "paused") {
+            registratoreRef.current.resume();
+        }
+    }, []);
 
     const confermaDownload = useCallback(() => {
         const corrente = pendingRecordingRef.current;
@@ -126,5 +119,13 @@ export function useVideoRecorder(canvasRef, setIsRecording) {
         setPendingRecording(null);
     }, []);
 
-    return { startRecording, stopRecording, pendingRecording, confermaDownload, scartaRegistrazione };
+    return {
+        startRecording,
+        stopRecording,
+        pendingRecording,
+        confermaDownload,
+        scartaRegistrazione,
+        pausaRegistrazione,
+        riprendiRegistrazione
+    };
 }

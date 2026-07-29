@@ -51,8 +51,11 @@ export default function App() {
   const [fileCaricato, setFileCaricato] = useState(null);
   const [videoUrl, setVideoUrl] = useState(null);
 
-  // Stato per il timer pre-start
+  // Nuovi stati per il controllo della riproduzione
   const [contoAllaRovescia, setContoAllaRovescia] = useState(null);
+  const [inPausa, setInPausa] = useState(false);
+  const [videoTerminato, setVideoTerminato] = useState(false);
+
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (file) {
@@ -68,6 +71,7 @@ export default function App() {
     error: erroreModello,
     validReps: ripetizioniValide,
     noReps: ripetizioniNonValide,
+    reset: resetConteggio,
   } = usePose(esercizioScelto, allenamentoAvviato, cameraLato, staRegistrando, modalitaAcquisizione === 'file' ? videoUrl : null);
 
   const {
@@ -76,6 +80,8 @@ export default function App() {
     pendingRecording,
     confermaDownload,
     scartaRegistrazione,
+    pausaRegistrazione,
+    riprendiRegistrazione,
   } = useVideoRecorder(canvasRef, setStaRegistrando);
 
   const suonaBeep = () => {
@@ -107,9 +113,6 @@ export default function App() {
     if (ripetizioniValide > 0) suonaBeep();
   }, [ripetizioniValide]);
 
-  // Se l'utente non conferma né ignora entro 20s, scartiamo automaticamente:
-  // evita di lasciare per sempre in memoria un Blob video non richiesto se
-  // l'atleta si allontana senza guardare lo schermo.
   useEffect(() => {
     if (!pendingRecording) return;
     const timerId = setTimeout(() => {
@@ -136,7 +139,6 @@ export default function App() {
     trovaFotocamere();
   }, []);
 
-  // Gestione del Timer Pre-Start
   useEffect(() => {
     if (contoAllaRovescia === null) return;
 
@@ -256,6 +258,9 @@ export default function App() {
               className="hidden"
               playsInline
               muted
+              onEnded={() => {
+                if (modalitaAcquisizione === 'file') setVideoTerminato(true);
+              }}
             />
             <canvas ref={canvasRef} className="w-full h-auto block" />
 
@@ -274,36 +279,85 @@ export default function App() {
           </main>
 
           {!caricamentoModello && !erroreModello && (
-            <button
-              onClick={() => {
-                if (staRegistrando) {
-                  fermaRegistrazione(true, { valide: ripetizioniValide, nonValide: ripetizioniNonValide });
-                  if (modalitaAcquisizione === 'file' && videoRef.current) videoRef.current.pause();
-                } else if (contoAllaRovescia === null) {
-                  if (modalitaAcquisizione === 'live') {
-                    setContoAllaRovescia(3);
-                  } else {
-                    avviaRegistrazione();
-                    if (videoRef.current) videoRef.current.play();
-                  }
-                }
-              }}
-              disabled={contoAllaRovescia !== null}
-              className={`w-full mt-4 flex items-center justify-center gap-3 py-4 text-sm font-bold tracking-widest rounded-none border transition-none ${contoAllaRovescia !== null
-                ? 'bg-gray-200 text-gray-400 border-gray-300 cursor-not-allowed'
-                : staRegistrando
-                  ? 'bg-red-600 text-white border-red-600 animate-pulse'
-                  : 'bg-white text-[#002f6c] border-[#002f6c] hover:bg-[#002f6c] hover:text-white'
-                }`}
-            >
-              {contoAllaRovescia !== null
-                ? 'PREPARAZIONE...'
-                : staRegistrando
-                  ? 'TERMINA ANALISI'
-                  : (modalitaAcquisizione === 'file' ? 'AVVIA ANALISI' : 'INIZIA ESERCIZIO')}
-            </button>
+            <div className="w-full mt-4 flex flex-col gap-2">
+              {contoAllaRovescia !== null ? (
+                <button disabled className="w-full py-4 text-sm font-bold tracking-widest rounded-none border border-gray-300 bg-gray-200 text-gray-400 cursor-not-allowed">
+                  PREPARAZIONE...
+                </button>
+              ) : staRegistrando ? (
+                videoTerminato ? (
+                  <div className="flex gap-2 w-full">
+                    <button
+                      onClick={() => {
+                        if (videoRef.current) {
+                          videoRef.current.currentTime = 0;
+                          videoRef.current.play();
+                        }
+                        resetConteggio();
+                        setVideoTerminato(false);
+                        if (inPausa) setInPausa(false);
+                      }}
+                      className="flex-1 py-4 text-sm font-bold tracking-widest rounded-none border border-[#002f6c] bg-white text-[#002f6c] transition-none hover:bg-[#002f6c] hover:text-white"
+                    >
+                      RIAVVIA VIDEO
+                    </button>
+                    <button
+                      onClick={() => {
+                        fermaRegistrazione(true, { valide: ripetizioniValide, nonValide: ripetizioniNonValide });
+                        setVideoTerminato(false);
+                      }}
+                      className="flex-1 py-4 text-sm font-bold tracking-widest rounded-none border border-red-600 bg-red-600 text-white transition-none hover:bg-white hover:text-red-600"
+                    >
+                      TERMINA
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex gap-2 w-full">
+                    <button
+                      onClick={() => {
+                        if (inPausa) {
+                          if (videoRef.current) videoRef.current.play();
+                          riprendiRegistrazione();
+                          setInPausa(false);
+                        } else {
+                          if (videoRef.current) videoRef.current.pause();
+                          pausaRegistrazione();
+                          setInPausa(true);
+                        }
+                      }}
+                      className={`flex-1 py-4 text-sm font-bold tracking-widest rounded-none border transition-none ${inPausa ? 'bg-[#002f6c] text-white border-[#002f6c] hover:bg-white hover:text-[#002f6c]' : 'bg-white text-[#002f6c] border-[#002f6c] hover:bg-[#002f6c] hover:text-white'}`}
+                    >
+                      {inPausa ? 'RIPRENDI' : 'PAUSA'}
+                    </button>
+                    <button
+                      onClick={() => {
+                        fermaRegistrazione(true, { valide: ripetizioniValide, nonValide: ripetizioniNonValide });
+                        if (modalitaAcquisizione === 'file' && videoRef.current) videoRef.current.pause();
+                        setInPausa(false);
+                      }}
+                      className="flex-1 py-4 text-sm font-bold tracking-widest rounded-none border border-red-600 bg-red-600 text-white transition-none animate-pulse hover:bg-white hover:text-red-600"
+                    >
+                      TERMINA
+                    </button>
+                  </div>
+                )
+              ) : (
+                <button
+                  onClick={() => {
+                    if (modalitaAcquisizione === 'live') {
+                      setContoAllaRovescia(3);
+                    } else {
+                      avviaRegistrazione();
+                      if (videoRef.current) videoRef.current.play();
+                    }
+                  }}
+                  className="w-full py-4 text-sm font-bold tracking-widest rounded-none border border-[#002f6c] bg-white text-[#002f6c] transition-none hover:bg-[#002f6c] hover:text-white"
+                >
+                  {modalitaAcquisizione === 'file' ? 'AVVIA ANALISI' : 'INIZIA ESERCIZIO'}
+                </button>
+              )}
+            </div>
           )}
-
         </div>
       )}
 
@@ -314,6 +368,8 @@ export default function App() {
               if (staRegistrando) fermaRegistrazione(false);
               setAllenamentoAvviato(false);
               setContoAllaRovescia(null);
+              setInPausa(false);
+              setVideoTerminato(false);
             }}
             className="w-full py-4 bg-white border border-[#002f6c] rounded-none text-sm uppercase tracking-widest transition-none hover:bg-[#002f6c] hover:text-white"
           >
