@@ -57,7 +57,7 @@ npm run dev
 
 The application supports two video input streams:
 
-1. **Camera (Live):** Utilizes the computer's webcam or the mobile device's camera (front/rear). Pressing "INIZIA ESERCIZIO" (START EXERCISE) triggers a 3-second calibration timer on the screen, allowing the user to position themselves correctly within the frame.
+1. **Camera (Live):** Utilizes the computer's webcam or the mobile device's camera (front/rear). Pressing "INIZIA ESERCIZIO" (START EXERCISE) triggers a timer on the screen, allowing the user to position themselves correctly within the frame.
 2. **Upload Video (File):** Allows the upload of pre-recorded `.mp4` or `.webm` files. The analysis starts immediately upon pressing the start button.
 
 ### Visual Feedback Functionality
