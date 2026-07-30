@@ -46,12 +46,10 @@ export default function App() {
   const [cameraDoppia, setCameraDoppia] = useState(false);
   const [staRegistrando, setStaRegistrando] = useState(false);
   const [infoModaleAperto, setInfoModaleAperto] = useState(false);
-
   const [modalitaAcquisizione, setModalitaAcquisizione] = useState('live');
   const [fileCaricato, setFileCaricato] = useState(null);
   const [videoUrl, setVideoUrl] = useState(null);
-
-  // Nuovi stati per il controllo della riproduzione
+  const [durataContoAllaRovescia, setDurataContoAllaRovescia] = useState(0);
   const [contoAllaRovescia, setContoAllaRovescia] = useState(null);
   const [inPausa, setInPausa] = useState(false);
   const [videoTerminato, setVideoTerminato] = useState(false);
@@ -218,6 +216,25 @@ export default function App() {
               </div>
             )}
 
+            {modalitaAcquisizione === 'live' && (
+              <div className="flex flex-col gap-3">
+                <h3 className="text-xs uppercase tracking-widest mb-1">
+                  {cameraDoppia ? '4. Timer di Avvio' : '3. Timer di Avvio'}
+                </h3>
+                <select
+                  value={durataContoAllaRovescia}
+                  onChange={(e) => setDurataContoAllaRovescia(Number(e.target.value))}
+                  className="w-full py-3 px-4 bg-white border border-[#002f6c] text-[#002f6c] text-sm rounded-none focus:outline-none focus:ring-1 focus:ring-[#002f6c]"
+                >
+                  {[0, 3, 5, 10, 30].map((s) => (
+                    <option key={s} value={s}>
+                      {s === 0 ? 'Avvio immediato (0s)' : `${s} secondi`}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             {modalitaAcquisizione === 'file' && (
               <div className="flex flex-col gap-3">
                 <h3 className="text-xs uppercase tracking-widest mb-1">3. Seleziona File (.mp4, .webm)</h3>
@@ -267,7 +284,6 @@ export default function App() {
             {contoAllaRovescia !== null && contoAllaRovescia > 0 && (
               <div className="absolute inset-0 z-40 flex flex-col items-center justify-center backdrop-blur-sm">
                 <span className="text-white text-6xl font-light tracking-widest">{contoAllaRovescia}</span>
-                <span className="text-white text-xs uppercase tracking-widest mt-4 opacity-70">Calibrazione in corso...</span>
               </div>
             )}
 
@@ -345,7 +361,11 @@ export default function App() {
                 <button
                   onClick={() => {
                     if (modalitaAcquisizione === 'live') {
-                      setContoAllaRovescia(3);
+                      if (durataContoAllaRovescia === 0) {
+                        avviaRegistrazione();
+                      } else {
+                        setContoAllaRovescia(durataContoAllaRovescia);
+                      }
                     } else {
                       avviaRegistrazione();
                       if (videoRef.current) videoRef.current.play();
