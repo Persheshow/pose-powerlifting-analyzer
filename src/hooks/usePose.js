@@ -22,6 +22,11 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
   const ultimoBersaglioRef = useRef(false);
   const isProcessingRef = useRef(false);
   const ultimoAggiornamentoUI = useRef(0);
+
+  // PRESTAZIONI: Limita l'inferenza del modello a ~30 FPS per non surriscaldare le CPU/GPU mobile (schermi 120Hz)
+  const ultimoTimestampInferenza = useRef(0);
+  const INTERVALLO_INFERENZA_MS = 33;
+
   const contatoreValideRef = useRef(0);
   const contatoreNonValideRef = useRef(0);
   const messaggioHudRef = useRef(null);
@@ -71,7 +76,7 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
           minTrackingConfidence: 0.5
         });
 
-        // compila gli shader WebGL dietro le quinte
+        // Warm-up della GPU: compila gli shader WebGL dietro le quinte
         try {
           const dummyCanvas = document.createElement('canvas');
           dummyCanvas.width = 10;
@@ -162,7 +167,8 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
       if (video && canvas && landmarker && video.readyState >= 2) {
         const isNewFrame = video.currentTime !== ultimoTempoVideoRef.current;
 
-        const ctx = canvas.getContext('2d');
+        // alpha: false ottimizza l'uso del compositore hardware nei browser WebKit e Chromium
+        const ctx = canvas.getContext('2d', { alpha: false });
         if (canvas.width !== video.videoWidth) {
           canvas.width = video.videoWidth;
           canvas.height = video.videoHeight;
@@ -185,8 +191,15 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
           return;
         }
 
-        if (isNewFrame && !video.paused && !isProcessingRef.current) {
+        // PRESTAZIONI: Esecuzione condizionale (30 FPS Cap + controllo se il thread GPU ha già terminato)
+        if (
+          isNewFrame &&
+          !video.paused &&
+          !isProcessingRef.current &&
+          (timestamp - ultimoTimestampInferenza.current >= INTERVALLO_INFERENZA_MS)
+        ) {
           isProcessingRef.current = true;
+          ultimoTimestampInferenza.current = timestamp;
           ultimoTempoVideoRef.current = video.currentTime;
 
           try {

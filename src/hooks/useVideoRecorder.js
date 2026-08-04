@@ -1,11 +1,12 @@
 import { useRef, useCallback, useState } from 'react';
 import { ENGINE } from '../config/exercises';
 
+// MODIFICA 1: VP8 e MP4 (H.264) prima di VP9 per sfruttare la codifica hardware su mobile
 const TIPI_PREFERITI = [
-    'video/webm;codecs=vp9',
     'video/webm;codecs=vp8',
-    'video/webm',
     'video/mp4',
+    'video/webm;codecs=vp9',
+    'video/webm',
 ];
 
 function scegliTipoSupportato() {
@@ -24,7 +25,7 @@ export function useVideoRecorder(canvasRef, setIsRecording) {
     const registratoreRef = useRef(null);
     const pezziVideoRef = useRef([]);
     const vuoleSalvareRef = useRef(true);
-    const tipoScelroRef = useRef(null);
+    const tipoSceltoRef = useRef(null);
     const riepilogoRef = useRef(null);
 
     const [pendingRecording, setPendingRecording] = useState(null);
@@ -33,9 +34,10 @@ export function useVideoRecorder(canvasRef, setIsRecording) {
     const startRecording = useCallback(() => {
         if (!canvasRef.current) return;
 
+        // Mantiene il framerate del video esportato a 30 FPS fissi
         const flusso = canvasRef.current.captureStream(30);
         const tipoSupportato = scegliTipoSupportato();
-        tipoScelroRef.current = tipoSupportato;
+        tipoSceltoRef.current = tipoSupportato;
 
         try {
             registratoreRef.current = tipoSupportato
@@ -43,7 +45,7 @@ export function useVideoRecorder(canvasRef, setIsRecording) {
                 : new MediaRecorder(flusso, { videoBitsPerSecond: ENGINE.RECORDING_BITRATE });
         } catch {
             registratoreRef.current = new MediaRecorder(flusso);
-            tipoScelroRef.current = null;
+            tipoSceltoRef.current = null;
         }
 
         registratoreRef.current.ondataavailable = (e) => {
@@ -54,7 +56,7 @@ export function useVideoRecorder(canvasRef, setIsRecording) {
 
         registratoreRef.current.onstop = () => {
             if (vuoleSalvareRef.current && pezziVideoRef.current.length > 0) {
-                const tipoEffettivo = tipoScelroRef.current || registratoreRef.current?.mimeType || 'video/webm';
+                const tipoEffettivo = tipoSceltoRef.current || registratoreRef.current?.mimeType || 'video/webm';
                 const tipoPulito = tipoEffettivo.split(';')[0];
                 const fileVideo = new Blob(pezziVideoRef.current, { type: tipoPulito });
                 const estensione = estensioneDaTipo(tipoEffettivo);
@@ -67,7 +69,8 @@ export function useVideoRecorder(canvasRef, setIsRecording) {
             pezziVideoRef.current = [];
         };
 
-        registratoreRef.current.start();
+        // MODIFICA 2: Rilascia un frammento di video ogni 1000 ms per evitare picchi di RAM
+        registratoreRef.current.start(1000);
         setIsRecording(true);
     }, [canvasRef, setIsRecording]);
 
