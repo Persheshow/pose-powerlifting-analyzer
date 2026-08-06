@@ -24,7 +24,7 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
   const angoliPrecRef = useRef({ primary: null, secondary: null });
   const framePersiRef = useRef(0);
   const ultimoTempoVideoRef = useRef(-1);
-  const smoothedLandmarksRef = useRef(null); // Ref per la stabilizzazione EMA spaziale
+  const smoothedLandmarksRef = useRef(null);
   const registrazioneRef = useRef(registrazioneAttiva);
   const ultimoPuntiRef = useRef(null);
   const ultimoLatoRef = useRef('LEFT');
@@ -225,7 +225,7 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
               const puntiStabilizzati = smoothLandmarksCoordinates(
                 puntiGrezzi,
                 smoothedLandmarksRef.current,
-                0.5 // smoothing factor (0.0 = no smoothing, 1.0 = max smoothing)
+                0.5 // smoothing factor
               );
               smoothedLandmarksRef.current = puntiStabilizzati;
               ultimoPuntiRef.current = puntiStabilizzati;
