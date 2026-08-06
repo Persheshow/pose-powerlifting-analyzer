@@ -1,21 +1,20 @@
 /**
  * @file poseUtils.js
- * @description Funzioni pure di supporto sui landmark MediaPipe, indipendenti da
- * React e dal ciclo di rendering. Estratte da usePose.js.
+ * @description Pure helper functions for MediaPipe landmarks.
  */
 
 /**
- * Determina quale lato del corpo (sinistro/destro) è meglio inquadrato dalla
- * camera, combinando due segnali indipendenti restituiti da MediaPipe:
- * - `visibility`: confidenza del modello sulla presenza/riconoscibilità del landmark;
- * - `z`: profondità relativa (valori minori = più vicino alla camera).
+ * Determines which side of the body (left/right) is better framed by the
+ * camera, combining two independent signals returned by MediaPipe:
+ * - `visibility`: model confidence about the presence of the landmark;
+ * - `z`: relative depth (smaller values = closer to the camera).
  *
- * Un lato è considerato "inquadrato" se ha visibility sensibilmente maggiore
- * (margine di 0.2) E minore profondità (più vicino) rispetto all'altro lato.
- * In caso di segnali discordanti o non abbastanza netti, si ricade sul solo
- * criterio della visibility.
+ * A side is considered "framed" if it has significantly greater visibility
+ * (margin of 0.2) AND smaller depth (closer) than the other side.
+ * In case of conflicting or not sharp enough signals, it falls back to the
+ * visibility criterion alone.
  *
- * @param {Array<{visibility:number, z:number}>} landmarks - 33 landmark posa MediaPipe.
+ * @param {Array<{visibility:number, z:number}>} landmarks - 33 MediaPipe pose landmarks.
  * @returns {'LEFT'|'RIGHT'}
  */
 export function determinaLatoInquadrato(landmarks) {

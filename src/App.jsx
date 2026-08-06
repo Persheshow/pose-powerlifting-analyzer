@@ -34,11 +34,19 @@ const INFO_ESERCIZI = {
   }
 };
 
+/**
+ * Check whether the application is running on a mobile device.
+ * @returns {boolean} - True if the user agent belongs to a mobile device.
+ */
 const isMobileDevice = () => {
   if (typeof navigator === 'undefined') return false;
   return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 };
 
+/**
+ * Main application component that renders UI, handles exercise selection, and integrates
+ * pose tracking with recording controls.
+ */
 export default function App() {
   const [esercizioScelto, setEsercizioScelto] = useState('SQUAT');
   const [allenamentoAvviato, setAllenamentoAvviato] = useState(false);
@@ -54,6 +62,10 @@ export default function App() {
   const [inPausa, setInPausa] = useState(false);
   const [videoTerminato, setVideoTerminato] = useState(false);
 
+  /**
+   * Handle the selected video file and set it as the source for analysis.
+   * @param {Event} e - Change event from the file input.
+   */
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (file) {
@@ -82,6 +94,9 @@ export default function App() {
     riprendiRegistrazione,
   } = useVideoRecorder(canvasRef, setStaRegistrando);
 
+  /**
+   * Play a short beep sound to indicate a valid repetition has been counted.
+   */
   const suonaBeep = () => {
     try {
       const CtxAudio = window.AudioContext || window.webkitAudioContext;
@@ -120,6 +135,9 @@ export default function App() {
   }, [pendingRecording, scartaRegistrazione]);
 
   useEffect(() => {
+    /**
+     * Detect the number of available video input devices and enable dual-camera UI if possible.
+     */
     async function trovaFotocamere() {
       if (isMobileDevice()) {
         setCameraDoppia(true);
@@ -192,10 +210,10 @@ export default function App() {
                 <span className="text-xs tracking-widest mb-1">i)</span> Posizionare la fotocamera lateralmente e ad altezza vita, riprenendo l'intero corpo.
                 </li>
                 <li>
-                <span className="text-xs tracking-widest mb-1">ii)</span> Utilizzare il timer, se necessario, per prepararsi prima di iniziare l&apos;esercizio.
+                <span className="text-xs tracking-widest mb-1">ii)</span> Utilizzare il timer, se necessario, per prepararsi prima di iniziare l'esecuzione dell'esercizio.
                 </li>
                 <li>
-                <span className="text-xs tracking-widest mb-1">iii)</span> Evitare il passaggio di altre persone tra la fotocamera e l&apos;atleta.
+                <span className="text-xs tracking-widest mb-1">iii)</span> Evitare il passaggio di altre persone tra la fotocamera e l'atleta.
                 </li>
               </ul>
             </div>

@@ -1,10 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
 import { PoseLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
 import { processFrame, createInitialState } from '../logic/repLogic';
-import { drawSkeleton, drawSquatOverlays, drawHUD } from '../utils/canvasRenderer';
+import { drawSkeleton, drawHUD } from '../utils/canvasRenderer';
 import { determinaLatoInquadrato } from '../utils/poseUtils';
 import { ESERCIZI, ENGINE } from '../config/exercises';
 
+/**
+ * Custom React hook that initializes MediaPipe pose tracking and updates exercise state.
+ * @param {string} esercizio - Key of the exercise to track (e.g., 'SQUAT', 'DEADLIFT', 'OVERHEAD_PRESS').
+ * @param {boolean} attivo - Whether the pose tracking is active.
+ * @param {string} latoCamera - Camera facing mode ('user' for front camera, 'environment' for back camera).
+ * @param {boolean} registrazioneAttiva - Whether recording is active (used to control inference and rendering).
+ * @param {string|null} videoUrl - Optional URL of a video to use instead of the live camera feed.
+ * @returns {Object} - Refs and state variables for video, canvas, loading status, tracking status, errors, rep counts, faults, angles, and a reset function.
+ */
 export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, videoUrl) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
@@ -22,11 +31,7 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
   const ultimoBersaglioRef = useRef(false);
   const isProcessingRef = useRef(false);
   const ultimoAggiornamentoUI = useRef(0);
-
-  // PRESTAZIONI: Limita l'inferenza del modello a ~30 FPS per non surriscaldare le CPU/GPU mobile (schermi 120Hz)
   const ultimoTimestampInferenza = useRef(0);
-  const INTERVALLO_INFERENZA_MS = 33;
-
   const contatoreValideRef = useRef(0);
   const contatoreNonValideRef = useRef(0);
   const messaggioHudRef = useRef(null);
@@ -76,7 +81,6 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
           minTrackingConfidence: 0.5
         });
 
-        // Warm-up della GPU: compila gli shader WebGL dietro le quinte
         try {
           const dummyCanvas = document.createElement('canvas');
           dummyCanvas.width = 10;
@@ -127,6 +131,10 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
         }
       };
     } else {
+      /**
+       * Start the camera stream and attach it to the video element.
+       * Uses the selected camera facing mode and preferred resolution.
+       */
       async function avviaFotocamera() {
         try {
           const stream = await navigator.mediaDevices.getUserMedia({
@@ -159,6 +167,10 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
   useEffect(() => {
     if (!attivo) return;
 
+    /**
+     * Main rendering loop: draws the video frame, runs pose inference,
+     * updates exercise state, and renders overlays on the canvas.
+     */
     function ciclo(timestamp) {
       const video = videoRef.current;
       const canvas = canvasRef.current;
@@ -166,8 +178,6 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
 
       if (video && canvas && landmarker && video.readyState >= 2) {
         const isNewFrame = video.currentTime !== ultimoTempoVideoRef.current;
-
-        // alpha: false ottimizza l'uso del compositore hardware nei browser WebKit e Chromium
         const ctx = canvas.getContext('2d', { alpha: false });
         if (canvas.width !== video.videoWidth) {
           canvas.width = video.videoWidth;
@@ -191,12 +201,11 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
           return;
         }
 
-        // PRESTAZIONI: Esecuzione condizionale (30 FPS Cap + controllo se il thread GPU ha già terminato)
         if (
           isNewFrame &&
           !video.paused &&
           !isProcessingRef.current &&
-          (timestamp - ultimoTimestampInferenza.current >= INTERVALLO_INFERENZA_MS)
+          (timestamp - ultimoTimestampInferenza.current >= ENGINE.INTERVALLO_INFERENZA_MS)
         ) {
           isProcessingRef.current = true;
           ultimoTimestampInferenza.current = timestamp;
@@ -266,7 +275,6 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
           drawSkeleton(ctx, ultimoPuntiRef.current, canvas.width, canvas.height, ultimoBersaglioRef.current, ultimoLatoRef.current, esercizio, erroreLampeggiante);
           if (esercizio === 'SQUAT') {
             const puntoGinocchio = ultimoPuntiRef.current[ESERCIZI.SQUAT.landmarks[ultimoLatoRef.current].knee];
-            drawSquatOverlays(ctx, canvas.width, canvas.height, puntoGinocchio, ultimoBersaglioRef.current, ginocchioYSmoothRef);
           }
           ctx.restore();
         }
@@ -288,6 +296,9 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
     return () => { if (frameIdRef.current) cancelAnimationFrame(frameIdRef.current); };
   }, [esercizio, attivo, latoCamera, videoUrl]);
 
+  /**
+   * Reset the current pose tracking session state and UI counters.
+   */
   function reset() {
     statoRepRef.current = createInitialState();
     angoliPrecRef.current = { primary: null, secondary: null };

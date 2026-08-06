@@ -3,6 +3,7 @@ import { ESERCIZI, SKELETON_COLORS, ENGINE } from '../config/exercises';
 let watermarkMessaggio = null;
 let watermarkScadenza = 0;
 
+/// Event listener for custom 'execution_error' events to display a watermark message on the canvas.
 if (typeof window !== 'undefined') {
     window.addEventListener('execution_error', (e) => {
         watermarkMessaggio = e.detail;
@@ -10,6 +11,17 @@ if (typeof window !== 'undefined') {
     });
 }
 
+/**
+ * Draw the exercise skeleton overlay on the canvas.
+ * @param {CanvasRenderingContext2D} ctx - Drawing context for the canvas.
+ * @param {Array} landmarks - Pose landmarks detected by MediaPipe.
+ * @param {number} w - Width of the canvas.
+ * @param {number} h - Height of the canvas.
+ * @param {boolean} isTargetReached - Whether the target state is currently reached.
+ * @param {'LEFT'|'RIGHT'} side - Side to use for landmark connections.
+ * @param {string} ex - Exercise key used to select landmark configuration.
+ * @param {boolean} hasError - Whether should render an error highlight.
+ */
 export function drawSkeleton(ctx, landmarks, w, h, isTargetReached, side, ex, hasError) {
     let colore = SKELETON_COLORS.active;
     if (hasError) colore = SKELETON_COLORS.warning;
@@ -52,11 +64,17 @@ export function drawSkeleton(ctx, landmarks, w, h, isTargetReached, side, ex, ha
     }
 }
 
-export function drawSquatOverlays(ctx, w, h, kneePoint, isTargetReached, smoothedKneeYRef) {
-    // Funzione svuotata: la linea del parallelo non viene più disegnata.
-    // La lasciamo dichiarata per non rompere le chiamate da usePose.js.
-}
 
+/**
+ * Draw the heads-up display (HUD) overlay with repetition count and status messages.
+ * @param {CanvasRenderingContext2D} ctx - Drawing context for the canvas.
+ * @param {number} w - Width of the canvas.
+ * @param {number} h - Height of the canvas.
+ * @param {number} validReps - Number of valid repetitions counted.
+ * @param {Object|null} hudMessage - Optional HUD message to display.
+ * @param {boolean} isTrackingLost - Whether the pose tracking is currently lost.
+ * @param {number|null} currentAngle - Current primary angle to display.
+ */
 export function drawHUD(ctx, w, h, validReps, hudMessage, isTrackingLost, currentAngle) {
     ctx.save();
     ctx.fillStyle = "rgba(0, 47, 108, 0.75)";
@@ -93,7 +111,6 @@ export function drawHUD(ctx, w, h, validReps, hudMessage, isTrackingLost, curren
         }
     }
 
-    // --- WATERMARK CENTRALE OSTRUTTIVO ---
     if (Date.now() < watermarkScadenza && watermarkMessaggio) {
         ctx.fillStyle = 'rgba(220, 38, 38, 0.85)';
         ctx.fillRect(0, h / 2 - 60, w, 120);

@@ -1,9 +1,9 @@
 /**
  * @file exercises.js
- * @description File di configurazione globale. Ogni soglia numerica usata dal
- * motore di validazione (repLogic.js) deve vivere qui: questo rende visibile
- * "a colpo d'occhio" il criterio biomeccanico usato per ciascuna alzata, senza
- * dover leggere l'implementazione della FSM.
+ * @description Global configuration file. Every numeric threshold used by the
+ * validation engine (repLogic.js) lives here: this makes the biomechanical
+ * criteria for each lift visible at a glance without reading the FSM
+ * implementation.
  */
 
 export const ESERCIZI = {
@@ -52,46 +52,48 @@ export const SMOOTHING = {
 };
 
 /**
- * Parametri del motore di tracking/validazione, indipendenti dal singolo esercizio.
- * Prima erano letteral-sparsi (magic numbers) in usePose.js e repLogic.js.
+ * Parameters for the tracking/validation engine, independent of the specific exercise.
  */
 export const ENGINE = {
-  // Soglia minima di "visibility" (confidenza MediaPipe) sotto la quale un
-  // landmark è considerato non affidabile ai fini della validazione.
+  // Minimum "visibility" threshold (MediaPipe confidence) below which a
+  // landmark is considered unreliable for validation purposes.
   VISIBILITY_THRESHOLD: 0.15,
-  // Soglia di visibility (più permissiva) sotto la quale un landmark non viene
-  // comunque disegnato sullo scheletro overlay.
+  // Visibility threshold (more permissive) below which a landmark is not
+  // drawn on the skeleton overlay.
   DRAW_VISIBILITY_THRESHOLD: 0.2,
-  // Finestra di "grazia" dopo l'avvio dell'esercizio/reset, durante la quale non
-  // si valutano transizioni di stato (evita falsi trigger sul primo frame utile).
+  // Grace window after exercise start/reset during which state transitions
+  // are not evaluated (prevents false triggers on the first usable frame).
   SETUP_GRACE_MS: 1000,
-  // Tempo di occlusione continuativa (landmark chiave non visibili) dopo il quale
-  // lo stato del movimento in corso viene resettato a STANDING.
+  // Continuous occlusion time (key landmarks not visible) after which the
+  // current movement state is reset to STANDING.
   OCCLUSION_RESET_MS: 1000,
-  // Tempo di inattività (nessuna transizione di fase) dopo il quale la sessione
-  // in corso viene abbandonata e riportata a STANDING.
+  // Inactivity time (no phase transition) after which the current session
+  // is abandoned and returned to STANDING.
   SESSION_TIMEOUT_MS: 5000,
-  // Variazione minima (in gradi) tra il campione più vecchio e quello attuale nel
-  // buffer storico angoli per riconoscere l'inizio della fase di risalita.
+  // Minimum change (in degrees) between the oldest sample and the current one
+  // in the historical angle buffer to recognize the start of the ascent phase.
   ASCENT_MIN_DELTA_DEG: 3.0,
-  // Lunghezza del buffer storico angoli usato per rilevare l'inversione di fase.
+  // Length of the historical angle buffer used to detect phase inversion.
   ASCENT_HISTORY_LEN: 5,
-  // Numero di frame consecutivi senza landmark validi dopo cui la UI segnala
-  // "corpo non rilevato".
+  // Number of consecutive frames without valid landmarks after which the UI
+  // reports "body not detected".
   TRACKING_LOST_FRAMES: 30,
-  // Finestra temporale entro cui si contano ripetizioni consecutive troppo veloci.
+  // Time window within which consecutive too-fast repetitions are counted.
   FAST_REP_WINDOW_MS: 5000,
-  // Numero di ripetizioni troppo veloci in finestra oltre il quale scatta l'avviso.
+  // Number of too-fast repetitions within the window that triggers the warning.
   FAST_REP_TRIGGER_COUNT: 3,
-  // Durata di visualizzazione del banner HUD "RIPETIZIONE VALIDA" / "NO REP".
+  // Duration of display for the HUD banner "VALID REP" / "NO REP".
   HUD_VALID_MS: 2000,
   HUD_INVALID_MS: 2000,
-  // Durata del watermark "RALLENTA L'ESECUZIONE" impresso nel video esportato.
+  // Duration of the "SLOW DOWN" watermark stamped on the exported video.
   WATERMARK_MS: 2500,
   CAMERA_WIDTH_IDEAL: 1280,
   CAMERA_HEIGHT_IDEAL: 720,
-  // Bitrate video richiesto a MediaRecorder per l'esportazione. Senza questo
-  // valore esplicito il browser applica un default spesso conservativo per
-  // gli stream generati da canvas, con visibili artefatti di compressione.
+  // Video bitrate requested to MediaRecorder for exporting. Without this
+  // explicit value the browser often applies a conservative default for
+  // streams generated from canvas, producing visible compression artifacts.
   RECORDING_BITRATE: 8_000_000, // 8 Mbps
+  // Inference interval for pose detection (1000 ms / 33 ms = 30.3 FPS). Lower values increase CPU load.
+  INTERVALLO_INFERENZA_MS: 33,
+  
 };
