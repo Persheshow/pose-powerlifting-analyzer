@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { PoseLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
 import { processFrame, createInitialState } from '../logic/repLogic';
 import { drawSkeleton, drawHUD } from '../utils/canvasRenderer';
-import { determinaLatoInquadrato } from '../utils/poseUtils';
+import { determinaLatoInquadrato, smoothLandmarksCoordinates } from '../utils/poseUtils';
 import { ESERCIZI, ENGINE } from '../config/exercises';
 
 /**
@@ -24,7 +24,7 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
   const angoliPrecRef = useRef({ primary: null, secondary: null });
   const framePersiRef = useRef(0);
   const ultimoTempoVideoRef = useRef(-1);
-  const ginocchioYSmoothRef = useRef(null);
+  const smoothedLandmarksRef = useRef(null); // Ref per la stabilizzazione EMA spaziale
   const registrazioneRef = useRef(registrazioneAttiva);
   const ultimoPuntiRef = useRef(null);
   const ultimoLatoRef = useRef('LEFT');
@@ -47,7 +47,7 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
     statoRepRef.current = createInitialState();
     angoliPrecRef.current = { primary: null, secondary: null };
     framePersiRef.current = 0;
-    ginocchioYSmoothRef.current = null;
+    smoothedLandmarksRef.current = null;
     ultimoPuntiRef.current = null;
     contatoreValideRef.current = 0;
     contatoreNonValideRef.current = 0;
@@ -76,9 +76,10 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
           },
           runningMode: 'VIDEO',
           numPoses: 1,
-          minPoseDetectionConfidence: 0.5,
-          minPosePresenceConfidence: 0.5,
-          minTrackingConfidence: 0.5
+          smoothLandmarks: true,
+          minPoseDetectionConfidence: 0.6,
+          minPosePresenceConfidence: 0.6,
+          minTrackingConfidence: 0.65
         });
 
         try {
@@ -218,12 +219,21 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
               framePersiRef.current = 0;
               setIsTrackingLost(prev => prev ? false : prev);
 
-              const punti = risultati.landmarks[0];
-              ultimoPuntiRef.current = punti;
-              const latoRilevato = determinaLatoInquadrato(punti);
+              const puntiGrezzi = risultati.landmarks[0];
+
+              // EMA stabilization
+              const puntiStabilizzati = smoothLandmarksCoordinates(
+                puntiGrezzi,
+                smoothedLandmarksRef.current,
+                0.5 // smoothing factor (0.0 = no smoothing, 1.0 = max smoothing)
+              );
+              smoothedLandmarksRef.current = puntiStabilizzati;
+              ultimoPuntiRef.current = puntiStabilizzati;
+
+              const latoRilevato = determinaLatoInquadrato(puntiStabilizzati);
               ultimoLatoRef.current = latoRilevato;
 
-              const esito = processFrame(esercizio, statoRepRef.current, punti, latoRilevato);
+              const esito = processFrame(esercizio, statoRepRef.current, puntiStabilizzati, latoRilevato);
               statoRepRef.current = esito.state;
               const { event, primaryAngle, secondaryAngle } = esito;
               ultimoBersaglioRef.current = esito.isTarget;
@@ -273,9 +283,6 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
             ctx.scale(-1, 1);
           }
           drawSkeleton(ctx, ultimoPuntiRef.current, canvas.width, canvas.height, ultimoBersaglioRef.current, ultimoLatoRef.current, esercizio, erroreLampeggiante);
-          if (esercizio === 'SQUAT') {
-            const puntoGinocchio = ultimoPuntiRef.current[ESERCIZI.SQUAT.landmarks[ultimoLatoRef.current].knee];
-          }
           ctx.restore();
         }
 
@@ -303,7 +310,7 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
     statoRepRef.current = createInitialState();
     angoliPrecRef.current = { primary: null, secondary: null };
     framePersiRef.current = 0;
-    ginocchioYSmoothRef.current = null;
+    smoothedLandmarksRef.current = null;
     ultimoPuntiRef.current = null;
 
     contatoreValideRef.current = 0;
