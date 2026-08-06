@@ -1,6 +1,6 @@
 /**
  * @file poseUtils.js
- * @description Pure helper functions for MediaPipe landmarks.
+ * @description Pure helper functions for MediaPipe landmarks and spatial filtering.
  */
 
 /**
@@ -26,4 +26,36 @@ export function determinaLatoInquadrato(landmarks) {
     if (visSx > visDx + 0.2 && zSx < zDx) return 'LEFT';
     if (visDx > visSx + 0.2 && zDx < zSx) return 'RIGHT';
     return visSx >= visDx ? 'LEFT' : 'RIGHT';
+}
+
+/**
+ * Applies an Exponential Moving Average (EMA) low-pass filter to the x, y, and z
+ * coordinates of each landmark to eliminate jitter.
+ *
+ * @param {Array<{x:number, y:number, z?:number, visibility?:number}>} currentLandmarks - Raw landmarks from current frame.
+ * @param {Array<{x:number, y:number, z?:number, visibility?:number}>|null} prevLandmarks - Smoothed landmarks from previous frame.
+ * @param {number} [alpha=0.5] - Smoothing factor
+ * @returns {Array<{x:number, y:number, z?:number, visibility?:number}>} - Smoothed landmarks.
+ */
+export function smoothLandmarksCoordinates(currentLandmarks, prevLandmarks, alpha = 0.5) {
+    if (!prevLandmarks || prevLandmarks.length !== currentLandmarks.length) {
+        return currentLandmarks;
+    }
+
+    const beta = 1 - alpha;
+
+    return currentLandmarks.map((curr, idx) => {
+        const prev = prevLandmarks[idx];
+
+        if (!curr || !prev || (curr.visibility !== undefined && curr.visibility < 0.5)) {
+            return curr;
+        }
+
+        return {
+            ...curr,
+            x: curr.x * alpha + prev.x * beta,
+            y: curr.y * alpha + prev.y * beta,
+            z: curr.z !== undefined && prev.z !== undefined ? curr.z * alpha + prev.z * beta : curr.z,
+        };
+    });
 }
