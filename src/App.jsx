@@ -189,7 +189,7 @@ export default function App() {
               <h3 className="text-xs uppercase tracking-widest mb-1">0. Istruzioni</h3>
               <ul className="text-xs md:text-sm text-gray-700 space-y-1.5 list-none">
                 <li>
-                <span className="text-xs tracking-widest mb-1">i)</span> Posizionare la fotocamera lateralmente e ad altezza vita.
+                <span className="text-xs tracking-widest mb-1">i)</span> Posizionare la fotocamera lateralmente e ad altezza vita, riprenendo l'intero corpo.
                 </li>
                 <li>
                 <span className="text-xs tracking-widest mb-1">ii)</span> Utilizzare il timer, se necessario, per prepararsi prima di iniziare l&apos;esercizio.
