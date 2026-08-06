@@ -57,10 +57,11 @@ export default function App() {
   const [modalitaAcquisizione, setModalitaAcquisizione] = useState('live');
   const [fileCaricato, setFileCaricato] = useState(null);
   const [videoUrl, setVideoUrl] = useState(null);
-  const [durataContoAllaRovescia, setDurataContoAllaRovescia] = useState(0);
+  const [durataContoAllaRovescia, setDurataContoAllaRovescia] = useState(3);
   const [contoAllaRovescia, setContoAllaRovescia] = useState(null);
   const [inPausa, setInPausa] = useState(false);
   const [videoTerminato, setVideoTerminato] = useState(false);
+  const [targetReps, setTargetReps] = useState(5);
 
   /**
    * Handle the selected video file and set it as the source for analysis.
@@ -127,12 +128,15 @@ export default function App() {
   }, [ripetizioniValide]);
 
   useEffect(() => {
-    if (!pendingRecording) return;
-    const timerId = setTimeout(() => {
-      scartaRegistrazione();
-    }, 20000);
-    return () => clearTimeout(timerId);
-  }, [pendingRecording, scartaRegistrazione]);
+    if (staRegistrando && targetReps > 0 && ripetizioniValide >= targetReps) {
+      fermaRegistrazione(true, { valide: ripetizioniValide, nonValide: ripetizioniNonValide });
+      if (modalitaAcquisizione === 'file' && videoRef.current) {
+        videoRef.current.pause();
+      }
+      setVideoTerminato(true);
+      setInPausa(false);
+    }
+  }, [ripetizioniValide, targetReps, staRegistrando, fermaRegistrazione, modalitaAcquisizione, ripetizioniNonValide, videoRef]);
 
   useEffect(() => {
     /**
@@ -177,7 +181,7 @@ export default function App() {
           <div className="bg-white border border-[#002f6c] w-full max-w-md flex flex-col rounded-none shadow-2xl">
             <div className="flex justify-between items-center border-b border-[#002f6c] p-4">
               <h2 className="text-sm font-bold uppercase tracking-widest">{INFO_ESERCIZI[esercizioScelto].titolo}</h2>
-              <button onClick={() => setInfoModaleAperto(false)} className="text-[#002f6c] hover:bg-[#002f6c] hover:text-white px-2 py-1 border border-transparent hover:border-[#002f6c] transition-none">✕</button>
+              <button onClick={() => setInfoModaleAperto(false)} className="text-[#002f6c] hover:bg-[#002f6c] hover:text-white px-2 py-1 border border-transparent hover:border-[#002f6c] transition-none cursor-pointer">✕</button>
             </div>
             <div className="p-4 flex flex-col gap-4">
               <div className="w-full bg-gray-100 border border-[#002f6c] aspect-video relative flex items-center justify-center overflow-hidden">
@@ -207,13 +211,13 @@ export default function App() {
               <h3 className="text-xs uppercase tracking-widest mb-1">0. Istruzioni</h3>
               <ul className="text-xs md:text-sm text-gray-700 space-y-1.5 list-none">
                 <li>
-                <span className="text-xs tracking-widest mb-1">i)</span> Posizionare la fotocamera lateralmente e ad altezza vita, riprenendo l'intero corpo.
+                  <span className="text-xs tracking-widest mb-1 font-bold">i)</span> Posizionare la fotocamera lateralmente, riprendendo l&apos;intero corpo.
                 </li>
                 <li>
-                <span className="text-xs tracking-widest mb-1">ii)</span> Utilizzare il timer, se necessario, per prepararsi prima di iniziare l'esecuzione dell'esercizio.
+                  <span className="text-xs tracking-widest mb-1 font-bold">ii)</span> Utilizzare il timer, se necessario, per prepararsi prima di iniziare l&apos;esercizio.
                 </li>
                 <li>
-                <span className="text-xs tracking-widest mb-1">iii)</span> Evitare il passaggio di altre persone tra la fotocamera e l'atleta.
+                  <span className="text-xs tracking-widest mb-1 font-bold">iii)</span> Evitare il passaggio di altre persone tra la fotocamera e l&apos;atleta.
                 </li>
               </ul>
             </div>
@@ -221,29 +225,65 @@ export default function App() {
             <div className="flex flex-col gap-3">
               <div className="flex justify-between items-end mb-1">
                 <h3 className="text-xs uppercase tracking-widest">1. Esercizio</h3>
-                <button onClick={() => setInfoModaleAperto(true)} className="w-6 h-6 rounded-full border border-[#002f6c] flex items-center justify-center text-xs font-bold hover:bg-[#002f6c] hover:text-white transition-none">?</button>
+                <button onClick={() => setInfoModaleAperto(true)} className="w-6 h-6 rounded-full border border-[#002f6c] flex items-center justify-center text-xs font-bold hover:bg-[#002f6c] hover:text-white transition-none cursor-pointer">?</button>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                 {Object.entries(NOMI_ESERCIZI).map(([chiave, etichetta]) => (
-                  <button key={chiave} onClick={() => setEsercizioScelto(chiave)} className={`py-3 px-4 rounded-none text-sm border transition-none ${esercizioScelto === chiave ? 'bg-[#002f6c] text-white border-[#002f6c]' : 'bg-white text-[#002f6c] border-[#002f6c] hover:bg-[#002f6c] hover:text-white'}`}>{etichetta}</button>
+                  <button key={chiave} onClick={() => setEsercizioScelto(chiave)} className={`py-3 px-4 rounded-none text-sm border transition-none cursor-pointer ${esercizioScelto === chiave ? 'bg-[#002f6c] text-white border-[#002f6c]' : 'bg-white text-[#002f6c] border-[#002f6c] hover:bg-[#002f6c] hover:text-white'}`}>{etichetta}</button>
                 ))}
               </div>
             </div>
 
-            <div className="flex flex-col gap-3 border-[#002f6c] pt-6">
-              <h3 className="text-xs uppercase tracking-widest mb-1">2. Modalità Acquisizione</h3>
+            <div className="flex flex-col gap-3 border-t border-[#002f6c] pt-6">
+              <h3 className="text-xs uppercase tracking-widest mb-1">2. Target Ripetizioni</h3>
               <div className="flex gap-2">
-                <button onClick={() => setModalitaAcquisizione('live')} className={`flex-1 py-3 rounded-none text-sm border transition-none ${modalitaAcquisizione === 'live' ? 'bg-[#002f6c] text-white' : 'bg-white text-[#002f6c] border-[#002f6c] hover:bg-[#002f6c] hover:text-white'}`}>Fotocamera</button>
-                <button onClick={() => setModalitaAcquisizione('file')} className={`flex-1 py-3 rounded-none text-sm border transition-none ${modalitaAcquisizione === 'file' ? 'bg-[#002f6c] text-white' : 'bg-white text-[#002f6c] border-[#002f6c] hover:bg-[#002f6c] hover:text-white'}`}>Carica Video</button>
+                <div className="flex-1 relative">
+                  <input
+                    type="number"
+                    min="1"
+                    max="100"
+                    placeholder="N. Ripetizioni"
+                    value={targetReps > 0 ? targetReps : ''}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value, 10);
+                      setTargetReps(isNaN(val) || val <= 0 ? 0 : val);
+                    }}
+                    className="w-full py-3 px-4 bg-white border border-[#002f6c] text-[#002f6c] text-sm rounded-none focus:outline-none focus:ring-1 focus:ring-[#002f6c]"
+                  />
+                  {targetReps > 0 && (
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs uppercase tracking-widest text-gray-400 pointer-events-none">
+                      Rep
+                    </span>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setTargetReps(0)}
+                  className={`flex-1 py-3 px-4 rounded-none text-sm uppercase tracking-widest border transition-none cursor-pointer ${targetReps === 0
+                      ? 'bg-[#002f6c] text-white border-[#002f6c]'
+                      : 'bg-white text-[#002f6c] border-[#002f6c] hover:bg-[#002f6c] hover:text-white'
+                    }`}
+                >
+                  Nessun Target
+                </button>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-3 border-t border-[#002f6c] pt-6">
+              <h3 className="text-xs uppercase tracking-widest mb-1">3. Modalità Acquisizione</h3>
+              <div className="flex gap-2">
+                <button onClick={() => setModalitaAcquisizione('live')} className={`flex-1 py-3 rounded-none text-sm border transition-none cursor-pointer ${modalitaAcquisizione === 'live' ? 'bg-[#002f6c] text-white' : 'bg-white text-[#002f6c] border-[#002f6c] hover:bg-[#002f6c] hover:text-white'}`}>Fotocamera</button>
+                <button onClick={() => setModalitaAcquisizione('file')} className={`flex-1 py-3 rounded-none text-sm border transition-none cursor-pointer ${modalitaAcquisizione === 'file' ? 'bg-[#002f6c] text-white' : 'bg-white text-[#002f6c] border-[#002f6c] hover:bg-[#002f6c] hover:text-white'}`}>Carica Video</button>
               </div>
             </div>
 
             {modalitaAcquisizione === 'live' && cameraDoppia && (
               <div className="flex flex-col gap-3">
-                <h3 className="text-xs uppercase tracking-widest mb-1">3. Seleziona Fotocamera</h3>
+                <h3 className="text-xs uppercase tracking-widest mb-1">4. Seleziona Fotocamera</h3>
                 <div className="flex gap-2">
-                  <button onClick={() => setCameraLato('environment')} className={`flex-1 py-3 rounded-none text-sm border transition-none ${cameraLato === 'environment' ? 'bg-[#002f6c] text-white' : 'bg-white text-[#002f6c] border-[#002f6c] hover:bg-[#002f6c] hover:text-white'}`}>Posteriore</button>
-                  <button onClick={() => setCameraLato('user')} className={`flex-1 py-3 rounded-none text-sm border transition-none ${cameraLato === 'user' ? 'bg-[#002f6c] text-white' : 'bg-white text-[#002f6c] border-[#002f6c] hover:bg-[#002f6c] hover:text-white'}`}>Anteriore</button>
+                  <button onClick={() => setCameraLato('environment')} className={`flex-1 py-3 rounded-none text-sm border transition-none cursor-pointer ${cameraLato === 'environment' ? 'bg-[#002f6c] text-white' : 'bg-white text-[#002f6c] border-[#002f6c] hover:bg-[#002f6c] hover:text-white'}`}>Posteriore</button>
+                  <button onClick={() => setCameraLato('user')} className={`flex-1 py-3 rounded-none text-sm border transition-none cursor-pointer ${cameraLato === 'user' ? 'bg-[#002f6c] text-white' : 'bg-white text-[#002f6c] border-[#002f6c] hover:bg-[#002f6c] hover:text-white'}`}>Anteriore</button>
                 </div>
               </div>
             )}
@@ -251,12 +291,12 @@ export default function App() {
             {modalitaAcquisizione === 'live' && (
               <div className="flex flex-col gap-3">
                 <h3 className="text-xs uppercase tracking-widest mb-1">
-                  {cameraDoppia ? '4. Timer di Avvio' : '3. Timer di Avvio'}
+                  {cameraDoppia ? '5. Timer di Avvio' : '4. Timer di Avvio'}
                 </h3>
                 <select
                   value={durataContoAllaRovescia}
                   onChange={(e) => setDurataContoAllaRovescia(Number(e.target.value))}
-                  className="w-full py-3 px-4 bg-white border border-[#002f6c] text-[#002f6c] text-sm rounded-none focus:outline-none focus:ring-1 focus:ring-[#002f6c]"
+                  className="w-full py-3 px-4 bg-white border border-[#002f6c] text-[#002f6c] text-sm rounded-none focus:outline-none focus:ring-1 focus:ring-[#002f6c] cursor-pointer"
                 >
                   {[0, 3, 5, 10, 30].map((s) => (
                     <option key={s} value={s}>
@@ -269,7 +309,7 @@ export default function App() {
 
             {modalitaAcquisizione === 'file' && (
               <div className="flex flex-col gap-3">
-                <h3 className="text-xs uppercase tracking-widest mb-1">3. Seleziona File (.mp4, .webm)</h3>
+                <h3 className="text-xs uppercase tracking-widest mb-1">4. Seleziona File (.mp4, .webm)</h3>
                 <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-[#002f6c] border-dashed cursor-pointer bg-gray-50 hover:bg-gray-100 transition-none p-4 text-center">
                   <span className="text-sm text-[#002f6c] truncate w-full">
                     {fileCaricato ? fileCaricato.name : 'Clicca qui per selezionare un file'}
@@ -284,7 +324,7 @@ export default function App() {
           <button
             onClick={() => setAllenamentoAvviato(true)}
             disabled={modalitaAcquisizione === 'file' && !videoUrl}
-            className={`w-full py-4 border rounded-none text-lg uppercase tracking-widest transition-none ${modalitaAcquisizione === 'file' && !videoUrl ? 'bg-gray-200 text-gray-500 border-gray-300 cursor-not-allowed' : 'bg-[#002f6c] text-white border-[#002f6c] hover:bg-white hover:text-[#002f6c]'}`}
+            className={`w-full py-4 border rounded-none text-lg uppercase tracking-widest transition-none cursor-pointer ${modalitaAcquisizione === 'file' && !videoUrl ? 'bg-gray-200 text-gray-500 border-gray-300 cursor-not-allowed' : 'bg-[#002f6c] text-white border-[#002f6c] hover:bg-white hover:text-[#002f6c]'}`}
           >
             Inizia
           </button>
@@ -320,7 +360,7 @@ export default function App() {
             )}
 
             {modalitaAcquisizione === 'live' && cameraDoppia && !caricamentoModello && !erroreModello && !staRegistrando && contoAllaRovescia === null && (
-              <button onClick={() => setCameraLato(prev => prev === 'user' ? 'environment' : 'user')} className="absolute bottom-4 right-4 bg-white border border-[#002f6c] text-[#002f6c] p-3 rounded-none z-30 transition-none hover:bg-[#002f6c] hover:text-white">
+              <button onClick={() => setCameraLato(prev => prev === 'user' ? 'environment' : 'user')} className="absolute bottom-4 right-4 bg-white border border-[#002f6c] text-[#002f6c] p-3 rounded-none z-30 transition-none hover:bg-[#002f6c] hover:text-white cursor-pointer">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" /></svg>
               </button>
             )}
@@ -345,7 +385,7 @@ export default function App() {
                         setVideoTerminato(false);
                         if (inPausa) setInPausa(false);
                       }}
-                      className="flex-1 py-4 text-sm font-bold tracking-widest rounded-none border border-[#002f6c] bg-white text-[#002f6c] transition-none hover:bg-[#002f6c] hover:text-white"
+                      className="flex-1 py-4 text-sm font-bold tracking-widest rounded-none border border-[#002f6c] bg-white text-[#002f6c] transition-none hover:bg-[#002f6c] hover:text-white cursor-pointer"
                     >
                       RIAVVIA VIDEO
                     </button>
@@ -354,7 +394,7 @@ export default function App() {
                         fermaRegistrazione(true, { valide: ripetizioniValide, nonValide: ripetizioniNonValide });
                         setVideoTerminato(false);
                       }}
-                      className="flex-1 py-4 text-sm font-bold tracking-widest rounded-none border border-red-600 bg-red-600 text-white transition-none hover:bg-white hover:text-red-600"
+                      className="flex-1 py-4 text-sm font-bold tracking-widest rounded-none border border-red-600 bg-red-600 text-white transition-none hover:bg-white hover:text-red-600 cursor-pointer"
                     >
                       TERMINA
                     </button>
@@ -373,7 +413,7 @@ export default function App() {
                           setInPausa(true);
                         }
                       }}
-                      className={`flex-1 py-4 text-sm font-bold tracking-widest rounded-none border transition-none ${inPausa ? 'bg-[#002f6c] text-white border-[#002f6c] hover:bg-white hover:text-[#002f6c]' : 'bg-white text-[#002f6c] border-[#002f6c] hover:bg-[#002f6c] hover:text-white'}`}
+                      className={`flex-1 py-4 text-sm font-bold tracking-widest rounded-none border transition-none cursor-pointer ${inPausa ? 'bg-[#002f6c] text-white border-[#002f6c] hover:bg-white hover:text-[#002f6c]' : 'bg-white text-[#002f6c] border-[#002f6c] hover:bg-[#002f6c] hover:text-white'}`}
                     >
                       {inPausa ? 'RIPRENDI' : 'PAUSA'}
                     </button>
@@ -383,7 +423,7 @@ export default function App() {
                         if (modalitaAcquisizione === 'file' && videoRef.current) videoRef.current.pause();
                         setInPausa(false);
                       }}
-                      className="flex-1 py-4 text-sm font-bold tracking-widest rounded-none border border-red-600 bg-red-600 text-white transition-none animate-pulse hover:bg-white hover:text-red-600"
+                      className="flex-1 py-4 text-sm font-bold tracking-widest rounded-none border border-red-600 bg-red-600 text-white transition-none animate-pulse hover:bg-white hover:text-red-600 cursor-pointer"
                     >
                       TERMINA
                     </button>
@@ -403,7 +443,7 @@ export default function App() {
                       if (videoRef.current) videoRef.current.play();
                     }
                   }}
-                  className="w-full py-4 text-sm font-bold tracking-widest rounded-none border border-[#002f6c] bg-white text-[#002f6c] transition-none hover:bg-[#002f6c] hover:text-white"
+                  className="w-full py-4 text-sm font-bold tracking-widest rounded-none border border-[#002f6c] bg-white text-[#002f6c] transition-none hover:bg-[#002f6c] hover:text-white cursor-pointer"
                 >
                   {modalitaAcquisizione === 'file' ? 'AVVIA ANALISI' : 'INIZIA ESERCIZIO'}
                 </button>
@@ -423,7 +463,7 @@ export default function App() {
               setInPausa(false);
               setVideoTerminato(false);
             }}
-            className="w-full py-4 bg-white border border-[#002f6c] rounded-none text-sm uppercase tracking-widest transition-none hover:bg-[#002f6c] hover:text-white"
+            className="w-full py-4 bg-white border border-[#002f6c] rounded-none text-sm uppercase tracking-widest transition-none hover:bg-[#002f6c] hover:text-white cursor-pointer"
           >
             Indietro
           </button>
@@ -435,14 +475,16 @@ export default function App() {
         <p className="text-[15px] uppercase tracking-wider">Corso di Laurea in Informatica</p>
         <p className="text-[15px] uppercase tracking-wider opacity-70">A.A. 2025/2026</p>
       </footer>
+
       {pendingRecording && (
         <div className="fixed inset-x-0 bottom-0 z-50 bg-white border-t-2 border-[#002f6c] p-4 shadow-2xl">
           <div className="w-full max-w-xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-
             <div className="flex flex-col gap-0.5 text-center sm:text-left">
-              <p className="text-xs uppercase tracking-widest font-bold">Registrazione pronta</p>
+              <p className="text-xs uppercase tracking-widest font-bold text-[#002f6c]">
+                REGISTRAZIONE PRONTA
+              </p>
               {pendingRecording.riepilogo && (
-                <p className="text-[10px] uppercase tracking-wider opacity-70">
+                <p className="text-[10px] uppercase tracking-wider text-gray-600">
                   {pendingRecording.riepilogo.valide} valide &middot; {pendingRecording.riepilogo.nonValide} non valide
                 </p>
               )}
@@ -451,21 +493,21 @@ export default function App() {
             <div className="flex items-center gap-2 shrink-0">
               <button
                 onClick={scartaRegistrazione}
-                className="px-3 py-2 text-xs uppercase tracking-widest border border-[#002f6c] text-[#002f6c] rounded-none transition-none hover:bg-[#002f6c] hover:text-white"
+                className="px-3 py-2 text-xs uppercase tracking-widest border border-[#002f6c] text-[#002f6c] rounded-none transition-none hover:bg-[#002f6c] hover:text-white cursor-pointer"
               >
                 Ignora
               </button>
 
               <button
                 onClick={() => confermaDownload('mp4')}
-                className="px-3 py-2 text-xs uppercase tracking-widest border border-[#002f6c] bg-gray-100 text-[#002f6c] rounded-none transition-none hover:bg-[#002f6c] hover:text-white"
+                className="px-3 py-2 text-xs uppercase tracking-widest border border-[#002f6c] text-[#002f6c] rounded-none transition-none hover:bg-[#002f6c] hover:text-white cursor-pointer"
               >
                 Scarica .MP4
               </button>
 
               <button
                 onClick={() => confermaDownload('webm')}
-                className="px-3 py-2 text-xs uppercase tracking-widest border border-[#002f6c] bg-gray-100 text-[#002f6c] rounded-none transition-none hover:bg-[#002f6c] hover:text-white"
+                className="px-3 py-2 text-xs uppercase tracking-widest border border-[#002f6c] bg-gray-100 text-[#002f6c] rounded-none transition-none hover:bg-[#002f6c] hover:text-white cursor-pointer"
                 title="Formato WebM nativo"
               >
                 .WEBM
