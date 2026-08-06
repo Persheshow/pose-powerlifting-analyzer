@@ -95,15 +95,22 @@ export function useVideoRecorder(canvasRef, setIsRecording) {
         }
     }, []);
 
-    const confermaDownload = useCallback(() => {
+    // In useVideoRecorder.js
+
+    const confermaDownload = useCallback((formatoScelto) => {
         const corrente = pendingRecordingRef.current;
         if (!corrente) return;
 
-        const linkTemp = URL.createObjectURL(corrente.blob);
+        const estensione = formatoScelto === 'mp4' ? 'mp4' : 'webm';
+        const mimeType = formatoScelto === 'mp4' ? 'video/mp4' : 'video/webm';
+        const blobCondivisibile = new Blob([corrente.blob], { type: mimeType });
+        const nomeFile = `analisi_cinematica_${new Date().toISOString().slice(0, 10)}.${estensione}`;
+
+        const linkTemp = URL.createObjectURL(blobCondivisibile);
         const tagA = document.createElement('a');
         tagA.style.display = 'none';
         tagA.href = linkTemp;
-        tagA.download = corrente.filename;
+        tagA.download = nomeFile;
 
         document.body.appendChild(tagA);
         tagA.click();

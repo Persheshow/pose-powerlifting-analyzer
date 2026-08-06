@@ -185,6 +185,20 @@ export default function App() {
       {!allenamentoAvviato ? (
         <div className="w-full max-w-xl flex flex-col gap-6">
           <div className="bg-white border border-[#002f6c] rounded-none p-6 flex flex-col gap-8">
+            <div className="flex flex-col gap-3">
+              <h3 className="text-xs uppercase tracking-widest mb-1">0. Istruzioni</h3>
+              <ul className="text-xs md:text-sm text-gray-700 space-y-1.5 list-none">
+                <li>
+                <span className="text-xs tracking-widest mb-1">i)</span> Posizionare la fotocamera lateralmente e ad altezza vita.
+                </li>
+                <li>
+                <span className="text-xs tracking-widest mb-1">ii)</span> Utilizzare il timer, se necessario, per prepararsi prima di iniziare l&apos;esercizio.
+                </li>
+                <li>
+                <span className="text-xs tracking-widest mb-1">iii)</span> Evitare il passaggio di altre persone tra la fotocamera e l&apos;atleta.
+                </li>
+              </ul>
+            </div>
 
             <div className="flex flex-col gap-3">
               <div className="flex justify-between items-end mb-1">
@@ -198,7 +212,7 @@ export default function App() {
               </div>
             </div>
 
-            <div className="flex flex-col gap-3 border-t border-[#002f6c] pt-6">
+            <div className="flex flex-col gap-3 border-[#002f6c] pt-6">
               <h3 className="text-xs uppercase tracking-widest mb-1">2. Modalità Acquisizione</h3>
               <div className="flex gap-2">
                 <button onClick={() => setModalitaAcquisizione('live')} className={`flex-1 py-3 rounded-none text-sm border transition-none ${modalitaAcquisizione === 'live' ? 'bg-[#002f6c] text-white' : 'bg-white text-[#002f6c] border-[#002f6c] hover:bg-[#002f6c] hover:text-white'}`}>Fotocamera</button>
@@ -239,7 +253,7 @@ export default function App() {
               <div className="flex flex-col gap-3">
                 <h3 className="text-xs uppercase tracking-widest mb-1">3. Seleziona File (.mp4, .webm)</h3>
                 <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-[#002f6c] border-dashed cursor-pointer bg-gray-50 hover:bg-gray-100 transition-none p-4 text-center">
-                  <span className="text-sm font-bold text-[#002f6c] truncate w-full">
+                  <span className="text-sm text-[#002f6c] truncate w-full">
                     {fileCaricato ? fileCaricato.name : 'Clicca qui per selezionare un file'}
                   </span>
                   <input type="file" className="hidden" accept="video/mp4,video/webm,video/quicktime" onChange={handleFileChange} />
@@ -405,29 +419,41 @@ export default function App() {
       </footer>
       {pendingRecording && (
         <div className="fixed inset-x-0 bottom-0 z-50 bg-white border-t-2 border-[#002f6c] p-4 shadow-2xl">
-          <div className="w-full max-w-xl mx-auto flex items-center justify-between gap-4">
-            <div className="flex flex-col gap-0.5">
-              <p className="text-xs uppercase tracking-widest">Registrazione pronta</p>
+          <div className="w-full max-w-xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+
+            <div className="flex flex-col gap-0.5 text-center sm:text-left">
+              <p className="text-xs uppercase tracking-widest font-bold">Registrazione pronta</p>
               {pendingRecording.riepilogo && (
                 <p className="text-[10px] uppercase tracking-wider opacity-70">
                   {pendingRecording.riepilogo.valide} valide &middot; {pendingRecording.riepilogo.nonValide} non valide
                 </p>
               )}
             </div>
-            <div className="flex gap-2 shrink-0">
+
+            <div className="flex items-center gap-2 shrink-0">
               <button
                 onClick={scartaRegistrazione}
-                className="px-4 py-2 text-xs uppercase tracking-widest border border-[#002f6c] text-[#002f6c] rounded-none transition-none hover:bg-[#002f6c] hover:text-white"
+                className="px-3 py-2 text-xs uppercase tracking-widest border border-[#002f6c] text-[#002f6c] rounded-none transition-none hover:bg-[#002f6c] hover:text-white"
               >
                 Ignora
               </button>
+
               <button
-                onClick={confermaDownload}
-                className="px-4 py-2 text-xs uppercase tracking-widest border border-[#002f6c] bg-[#002f6c] text-white rounded-none transition-none hover:bg-white hover:text-[#002f6c]"
+                onClick={() => confermaDownload('mp4')}
+                className="px-3 py-2 text-xs uppercase tracking-widest border border-[#002f6c] bg-gray-100 text-[#002f6c] rounded-none transition-none hover:bg-[#002f6c] hover:text-white"
               >
-                Scarica Video
+                Scarica .MP4
+              </button>
+
+              <button
+                onClick={() => confermaDownload('webm')}
+                className="px-3 py-2 text-xs uppercase tracking-widest border border-[#002f6c] bg-gray-100 text-[#002f6c] rounded-none transition-none hover:bg-[#002f6c] hover:text-white"
+                title="Formato WebM nativo"
+              >
+                .WEBM
               </button>
             </div>
+
           </div>
         </div>
       )}
