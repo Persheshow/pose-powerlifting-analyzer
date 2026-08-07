@@ -3,7 +3,6 @@ import { ESERCIZI, SKELETON_COLORS, ENGINE } from '../config/exercises';
 let watermarkMessaggio = null;
 let watermarkScadenza = 0;
 
-/// Event listener for custom 'execution_error' events to display a watermark message on the canvas.
 if (typeof window !== 'undefined') {
     window.addEventListener('execution_error', (e) => {
         watermarkMessaggio = e.detail;

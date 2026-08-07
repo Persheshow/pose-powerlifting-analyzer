@@ -89,11 +89,9 @@ export const ENGINE = {
   WATERMARK_MS: 2500,
   CAMERA_WIDTH_IDEAL: 1280,
   CAMERA_HEIGHT_IDEAL: 720,
-  // Video bitrate requested to MediaRecorder for exporting. Without this
-  // explicit value the browser often applies a conservative default for
-  // streams generated from canvas, producing visible compression artifacts.
+  // Video bitrate requested to MediaRecorder for exporting.
   RECORDING_BITRATE: 8_000_000, // 8 Mbps
-  // Inference interval for pose detection (1000 ms / 33 ms = 30.3 FPS). Lower values increase CPU load.
+  // Inference interval for pose detection (1000 ms / 33 ms = 30.3 FPS).
   INTERVALLO_INFERENZA_MS: 33,
   
 };

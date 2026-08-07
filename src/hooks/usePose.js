@@ -114,21 +114,21 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
 
   useEffect(() => {
     if (!attivo) return;
-    const elVideo = videoRef.current;
+    const currentVideo = videoRef.current;
 
     if (videoUrl) {
-      if (elVideo) {
-        elVideo.srcObject = null;
-        elVideo.src = videoUrl;
-        elVideo.load();
-        elVideo.onloadeddata = () => {
-          elVideo.currentTime = 0.001;
+      if (currentVideo) {
+        currentVideo.srcObject = null;
+        currentVideo.src = videoUrl;
+        currentVideo.load();
+        currentVideo.onloadeddata = () => {
+          currentVideo.currentTime = 0.001;
         };
       }
       return () => {
-        if (elVideo) {
-          elVideo.pause();
-          elVideo.src = '';
+        if (currentVideo) {
+          currentVideo.pause();
+          currentVideo.src = '';
         }
       };
     } else {
@@ -147,9 +147,9 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
             },
             audio: false,
           });
-          if (elVideo) {
-            elVideo.srcObject = stream;
-            elVideo.onloadedmetadata = () => elVideo.play();
+          if (currentVideo) {
+            currentVideo.srcObject = stream;
+            currentVideo.onloadedmetadata = () => currentVideo.play();
           }
         } catch (err) {
           setError('Impossibile accedere al sensore ottico: ' + err.message);
@@ -157,9 +157,9 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
       }
       avviaFotocamera();
       return () => {
-        if (elVideo?.srcObject) {
-          elVideo.srcObject.getTracks().forEach(t => t.stop());
-          elVideo.srcObject = null;
+        if (currentVideo?.srcObject) {
+          currentVideo.srcObject.getTracks().forEach(t => t.stop());
+          currentVideo.srcObject = null;
         }
       };
     }

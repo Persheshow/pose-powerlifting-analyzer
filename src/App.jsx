@@ -75,6 +75,7 @@ export default function App() {
     }
   };
 
+  // Use the custom usePose hook to manage pose detection and repetition counting.
   const {
     videoRef,
     canvasRef,
@@ -85,6 +86,7 @@ export default function App() {
     reset: resetConteggio,
   } = usePose(esercizioScelto, allenamentoAvviato, cameraLato, staRegistrando, modalitaAcquisizione === 'file' ? videoUrl : null);
 
+  // Video recording controls using the custom useVideoRecorder hook.
   const {
     startRecording: avviaRegistrazione,
     stopRecording: fermaRegistrazione,
@@ -98,7 +100,7 @@ export default function App() {
   /**
    * Play a short beep sound to indicate a valid repetition has been counted.
    */
-  const suonaBeep = () => {
+  const Beep = () => {
     try {
       const CtxAudio = window.AudioContext || window.webkitAudioContext;
       if (!CtxAudio) return;
@@ -124,7 +126,7 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (ripetizioniValide > 0) suonaBeep();
+    if (ripetizioniValide > 0) Beep();
   }, [ripetizioniValide]);
 
   useEffect(() => {
