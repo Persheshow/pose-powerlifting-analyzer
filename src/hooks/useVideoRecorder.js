@@ -24,7 +24,7 @@ function scegliTipoSupportato() {
  * @param {string|null} tipo - type reported by MediaRecorder.
  * @returns {string} - File extension to use for the downloaded file.
  */
-function estensioneDaTipo(tipo) {
+function extractVideoFormat(tipo) {
     if (tipo && tipo.startsWith('video/mp4')) return 'mp4';
     return 'webm';
 }
@@ -75,7 +75,7 @@ export function useVideoRecorder(canvasRef, setIsRecording) {
                 const tipoEffettivo = tipoSceltoRef.current || registratoreRef.current?.mimeType || 'video/webm';
                 const tipoPulito = tipoEffettivo.split(';')[0];
                 const fileVideo = new Blob(pezziVideoRef.current, { type: tipoPulito });
-                const estensione = estensioneDaTipo(tipoEffettivo);
+                const estensione = extractVideoFormat(tipoEffettivo);
                 const nomeFile = `analisi_cinematica_${new Date().toISOString().slice(0, 10)}.${estensione}`;
                 const registrazione = { blob: fileVideo, filename: nomeFile, riepilogo: riepilogoRef.current };
                 pendingRecordingRef.current = registrazione;

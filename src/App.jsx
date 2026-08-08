@@ -97,9 +97,6 @@ export default function App() {
     riprendiRegistrazione,
   } = useVideoRecorder(canvasRef, setStaRegistrando);
 
-  /**
-   * Play a short beep sound to indicate a valid repetition has been counted.
-   */
   const Beep = () => {
     try {
       const CtxAudio = window.AudioContext || window.webkitAudioContext;
@@ -125,25 +122,30 @@ export default function App() {
     }
   };
 
+  // Play a beep sound whenever a valid repetition is detected.
   useEffect(() => {
     if (ripetizioniValide > 0) Beep();
   }, [ripetizioniValide]);
 
+  // Automatically stop recording when the target number of valid repetitions is reached.
   useEffect(() => {
     if (staRegistrando && targetReps > 0 && ripetizioniValide >= targetReps) {
-      fermaRegistrazione(true, { valide: ripetizioniValide, nonValide: ripetizioniNonValide });
-      if (modalitaAcquisizione === 'file' && videoRef.current) {
-        videoRef.current.pause();
-      }
-      setVideoTerminato(true);
-      setInPausa(false);
+
+      const timerId = setTimeout(() => {
+        fermaRegistrazione(true, { valide: ripetizioniValide, nonValide: ripetizioniNonValide });
+        if (modalitaAcquisizione === 'file' && videoRef.current) {
+          videoRef.current.pause();
+        }
+        setVideoTerminato(true);
+        setInPausa(false);
+      }, 2000); // 2-second delay before stopping recording
+
+      return () => clearTimeout(timerId);
     }
   }, [ripetizioniValide, targetReps, staRegistrando, fermaRegistrazione, modalitaAcquisizione, ripetizioniNonValide, videoRef]);
 
+  // Detect the number of available video input devices and enable dual-camera UI if possible.
   useEffect(() => {
-    /**
-     * Detect the number of available video input devices and enable dual-camera UI if possible.
-     */
     async function trovaFotocamere() {
       if (isMobileDevice()) {
         setCameraDoppia(true);
@@ -161,6 +163,7 @@ export default function App() {
     trovaFotocamere();
   }, []);
 
+  // Countdown effect to manage the countdown timer before starting the recording.
   useEffect(() => {
     if (contoAllaRovescia === null) return;
 
@@ -175,6 +178,7 @@ export default function App() {
     }
   }, [contoAllaRovescia, avviaRegistrazione]);
 
+  // main application render
   return (
     <div className="min-h-screen bg-white text-[#002f6c] flex flex-col items-center p-4 font-sans selection:bg-[#002f6c] selection:text-white relative">
 
@@ -211,15 +215,15 @@ export default function App() {
           <div className="bg-white border border-[#002f6c] rounded-none p-6 flex flex-col gap-8">
             <div className="flex flex-col gap-3">
               <h3 className="text-xs uppercase tracking-widest mb-1">0. Istruzioni</h3>
-              <ul className="text-xs md:text-sm text-gray-700 space-y-1.5 list-none">
+              <ul className="text-xs md:text-sm text-gray-700 space-y-2 list-none">
                 <li>
-                  <span className="text-xs tracking-widest mb-1 font-bold">i)</span> Posizionare la fotocamera lateralmente, riprendendo l&apos;intero corpo.
+                  <span className="text-xs tracking-widest mb-1 font-bold">i)</span> Inquadrare con un'angolazione sagittale (circa 70°-80°), evitando i 90° se si utilizzano dischi che potrebbero coprire le articolazioni.
                 </li>
                 <li>
-                  <span className="text-xs tracking-widest mb-1 font-bold">ii)</span> Utilizzare il timer, se necessario, per prepararsi prima di iniziare l&apos;esercizio.
+                  <span className="text-xs tracking-widest mb-1 font-bold">ii)</span> Assicurarsi che solo l'atleta sia presente nel video ed evitare il passaggio di altre persone.
                 </li>
                 <li>
-                  <span className="text-xs tracking-widest mb-1 font-bold">iii)</span> Evitare il passaggio di altre persone tra la fotocamera e l&apos;atleta.
+                  <span className="text-xs tracking-widest mb-1 font-bold">iii)</span> Non registrare in posti direttamente soleggiati, in controluce e/o con ombre marcate, e davanti a superfici specchianti, per evitare errori di tracciamento.
                 </li>
               </ul>
             </div>
@@ -263,8 +267,8 @@ export default function App() {
                   type="button"
                   onClick={() => setTargetReps(0)}
                   className={`flex-1 py-3 px-4 rounded-none text-sm uppercase tracking-widest border transition-none cursor-pointer ${targetReps === 0
-                      ? 'bg-[#002f6c] text-white border-[#002f6c]'
-                      : 'bg-white text-[#002f6c] border-[#002f6c] hover:bg-[#002f6c] hover:text-white'
+                    ? 'bg-[#002f6c] text-white border-[#002f6c]'
+                    : 'bg-white text-[#002f6c] border-[#002f6c] hover:bg-[#002f6c] hover:text-white'
                     }`}
                 >
                   Nessun Target

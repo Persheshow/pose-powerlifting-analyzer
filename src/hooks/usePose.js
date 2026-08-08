@@ -43,6 +43,7 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
   const [faults, setFaults] = useState([]);
   const [angles, setAngles] = useState({ primary: null, secondary: null });
 
+  // Reset the internal state and UI counters whenever the exercise, active status, camera side, or video URL changes.
   useEffect(() => {
     statoRepRef.current = createInitialState();
     angoliPrecRef.current = { primary: null, secondary: null };
@@ -59,13 +60,22 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
     setIsTrackingLost(false);
   }, [esercizio, attivo, latoCamera, videoUrl]);
 
+  // Update the recording reference whenever the recording status changes, and reset the state if recording starts.
   useEffect(() => {
     registrazioneRef.current = registrazioneAttiva;
     if (registrazioneAttiva) reset();
   }, [registrazioneAttiva]);
 
+  // Load the MediaPipe PoseLandmarker model asynchronously when the component mounts, and clean up on unmount.
   useEffect(() => {
     let componenteMontato = true;
+
+    /*
+      * Asynchronously load the MediaPipe PoseLandmarker model and perform a warm-up inference.
+      * If the component is unmounted before the model is loaded, close the model to free resources.
+      * If the model is loaded successfully, update the state to indicate that loading is complete.
+      * If an error occurs during loading, set the error state.
+    */
     async function caricaModello() {
       try {
         const vision = await FilesetResolver.forVisionTasks('/wasm');
@@ -112,6 +122,7 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
     };
   }, []);
 
+  // Start the camera or load the video when the component mounts or when the active status, camera side, or video URL changes. Clean up the media stream on unmount.
   useEffect(() => {
     if (!attivo) return;
     const currentVideo = videoRef.current;
@@ -165,6 +176,7 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
     }
   }, [attivo, latoCamera, videoUrl]);
 
+  // Main loop
   useEffect(() => {
     if (!attivo) return;
 
