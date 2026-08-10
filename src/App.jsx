@@ -217,13 +217,16 @@ export default function App() {
               <h3 className="text-xs uppercase tracking-widest mb-1">0. Istruzioni</h3>
               <ul className="text-xs md:text-sm text-gray-700 space-y-2 list-none">
                 <li>
-                  <span className="text-xs tracking-widest mb-1 font-bold">i)</span> Inquadrare con un'angolazione sagittale (circa 70°-80°), evitando i 90° se si utilizzano dischi che potrebbero coprire le articolazioni.
+                  <span className="text-xs tracking-widest mb-1 font-bold">i)</span> Inquadrare con un'angolazione sagittale, evitando i 90° se si utilizzano dischi che potrebbero coprire le articolazioni, e mantenendo una distanza di circa 2-3 metri dall'atleta, in modo che l'intero corpo sia visibile e centrato nel frame.
                 </li>
                 <li>
                   <span className="text-xs tracking-widest mb-1 font-bold">ii)</span> Assicurarsi che solo l'atleta sia presente nel video ed evitare il passaggio di altre persone.
                 </li>
                 <li>
                   <span className="text-xs tracking-widest mb-1 font-bold">iii)</span> Non registrare in posti direttamente soleggiati, in controluce e/o con ombre marcate, e davanti a superfici specchianti, per evitare errori di tracciamento.
+                </li>
+                <li>
+                  <span className="text-xs tracking-widest mb-1 font-bold">iv)</span> Eseguire i movimenti in modo controllato. Ripetizioni troppo veloci potrebbero non essere registrate correttamente.
                 </li>
               </ul>
             </div>
@@ -316,7 +319,7 @@ export default function App() {
             {modalitaAcquisizione === 'file' && (
               <div className="flex flex-col gap-3">
                 <h3 className="text-xs uppercase tracking-widest mb-1">4. Seleziona File (.mp4, .webm)</h3>
-                <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-[#002f6c] border-dashed cursor-pointer bg-gray-50 hover:bg-gray-100 transition-none p-4 text-center">
+                <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-[#002f6c] border-dashed bg-gray-50 hover:bg-gray-100 transition-none p-4 text-center cursor-pointer">
                   <span className="text-sm text-[#002f6c] truncate w-full">
                     {fileCaricato ? fileCaricato.name : 'Clicca qui per selezionare un file'}
                   </span>
@@ -330,7 +333,7 @@ export default function App() {
           <button
             onClick={() => setAllenamentoAvviato(true)}
             disabled={modalitaAcquisizione === 'file' && !videoUrl}
-            className={`w-full py-4 border rounded-none text-lg uppercase tracking-widest transition-none cursor-pointer ${modalitaAcquisizione === 'file' && !videoUrl ? 'bg-gray-200 text-gray-500 border-gray-300 cursor-not-allowed' : 'bg-[#002f6c] text-white border-[#002f6c] hover:bg-white hover:text-[#002f6c]'}`}
+            className={`w-full py-4 border rounded-none text-lg uppercase tracking-widest transition-none ${modalitaAcquisizione === 'file' && !videoUrl ? 'bg-gray-200 text-gray-500 border-gray-300 cursor-not-allowed' : 'bg-[#002f6c] text-white border-[#002f6c] hover:bg-white hover:text-[#002f6c] cursor-pointer'}`}
           >
             Inizia
           </button>
@@ -483,11 +486,14 @@ export default function App() {
       </footer>
 
       {pendingRecording && (
-        <div className="fixed inset-x-0 bottom-0 z-50 bg-white border-t-2 border-[#002f6c] p-4 shadow-2xl">
+        <div className="fixed inset-x-0 bottom-0 z-50 bg-white border-t-2 border-[#002f6c] p-4 shadow-2xl animate-fade-in">
           <div className="w-full max-w-xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+
             <div className="flex flex-col gap-0.5 text-center sm:text-left">
               <p className="text-xs uppercase tracking-widest font-bold text-[#002f6c]">
-                REGISTRAZIONE PRONTA
+                {targetReps > 0 && pendingRecording.riepilogo?.valide >= targetReps
+                  ? '★ TARGET RAGGIUNTO · REGISTRAZIONE PRONTA'
+                  : 'Registrazione pronta'}
               </p>
               {pendingRecording.riepilogo && (
                 <p className="text-[10px] uppercase tracking-wider text-gray-600">
@@ -498,21 +504,30 @@ export default function App() {
 
             <div className="flex items-center gap-2 shrink-0">
               <button
-                onClick={scartaRegistrazione}
+                onClick={() => {
+                  scartaRegistrazione();
+                  resetConteggio();
+                }}
                 className="px-3 py-2 text-xs uppercase tracking-widest border border-[#002f6c] text-[#002f6c] rounded-none transition-none hover:bg-[#002f6c] hover:text-white cursor-pointer"
               >
                 Ignora
               </button>
 
               <button
-                onClick={() => confermaDownload('mp4')}
-                className="px-3 py-2 text-xs uppercase tracking-widest border border-[#002f6c] text-[#002f6c] rounded-none transition-none hover:bg-[#002f6c] hover:text-white cursor-pointer"
+                onClick={() => {
+                  confermaDownload('mp4');
+                  resetConteggio();
+                }}
+                className="px-3 py-2 text-xs uppercase tracking-widest border border-[#002f6c] bg-gray-100 text-[#002f6c] rounded-none transition-none hover:bg-[#002f6c] hover:text-white cursor-pointer"
               >
                 Scarica .MP4
               </button>
 
               <button
-                onClick={() => confermaDownload('webm')}
+                onClick={() => {
+                  confermaDownload('webm');
+                  resetConteggio();
+                }}
                 className="px-3 py-2 text-xs uppercase tracking-widest border border-[#002f6c] bg-gray-100 text-[#002f6c] rounded-none transition-none hover:bg-[#002f6c] hover:text-white cursor-pointer"
                 title="Formato WebM nativo"
               >

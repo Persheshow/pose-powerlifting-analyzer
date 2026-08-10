@@ -70,12 +70,6 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
   useEffect(() => {
     let componenteMontato = true;
 
-    /*
-      * Asynchronously load the MediaPipe PoseLandmarker model and perform a warm-up inference.
-      * If the component is unmounted before the model is loaded, close the model to free resources.
-      * If the model is loaded successfully, update the state to indicate that loading is complete.
-      * If an error occurs during loading, set the error state.
-    */
     async function caricaModello() {
       try {
         const vision = await FilesetResolver.forVisionTasks('/wasm');
@@ -122,7 +116,7 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
     };
   }, []);
 
-  // Start the camera or load the video when the component mounts or when the active status, camera side, or video URL changes. Clean up the media stream on unmount.
+  // Start the camera or load the video when the component mounts or when the active status, camera side, or video URL changes.
   useEffect(() => {
     if (!attivo) return;
     const currentVideo = videoRef.current;
@@ -143,10 +137,6 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
         }
       };
     } else {
-      /**
-       * Start the camera stream and attach it to the video element.
-       * Uses the selected camera facing mode and preferred resolution.
-       */
       async function avviaFotocamera() {
         try {
           const stream = await navigator.mediaDevices.getUserMedia({
@@ -180,10 +170,6 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
   useEffect(() => {
     if (!attivo) return;
 
-    /**
-     * Main rendering loop: draws the video frame, runs pose inference,
-     * updates exercise state, and renders overlays on the canvas.
-     */
     function ciclo(timestamp) {
       const video = videoRef.current;
       const canvas = canvasRef.current;
@@ -245,34 +231,58 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
               const latoRilevato = determinaLatoInquadrato(puntiStabilizzati);
               ultimoLatoRef.current = latoRilevato;
 
-              const esito = processFrame(esercizio, statoRepRef.current, puntiStabilizzati, latoRilevato);
-              statoRepRef.current = esito.state;
-              const { event, primaryAngle, secondaryAngle } = esito;
-              ultimoBersaglioRef.current = esito.isTarget;
+              // ensure all critical landmarks are visible and within the frame before processing the repetition logic
+              const indiciNodiCritici = Object.values(ESERCIZI[esercizio].landmarks[latoRilevato]);
+              const puntiCritici = indiciNodiCritici.map(indice => puntiStabilizzati[indice]);
+              const tuttiVisibili = puntiCritici.every(p => p && p.visibility >= ENGINE.VISIBILITY_THRESHOLD);
+              const tuttiDentroFrame = puntiCritici.every(p => p && p.x >= 0.0 && p.x <= 1.0 && p.y >= 0.0 && p.y <= 1.0);
+              const isInquadraturaValida = indiciNodiCritici.every(indice => {
+                const p = puntiStabilizzati[indice];
+                return p &&
+                  p.visibility >= ENGINE.VISIBILITY_THRESHOLD &&
+                  p.x >= 0.0 && p.x <= 1.0 &&
+                  p.y >= 0.0 && p.y <= 1.0;
+              });
 
-              if (timestamp - ultimoAggiornamentoUI.current > 100) {
-                if (Math.abs((primaryAngle ?? 0) - (angoliPrecRef.current.primary ?? 0)) > 1) {
-                  setAngles({ primary: primaryAngle, secondary: secondaryAngle });
-                  angoliPrecRef.current = { primary: primaryAngle, secondary: secondaryAngle };
-                  ultimoAggiornamentoUI.current = timestamp;
+              if (!isInquadraturaValida) {
+                // If the critical landmarks are not all visible or not all within the frame, display a warning message on the HUD and skip the repetition processing for this frame.
+                messaggioHudRef.current = {
+                  type: 'INVALID',
+                  text: 'ARTICOLAZIONI NON VISIBILI: ALLONTANARSI',
+                  expires: performance.now() + 500
+                };
+              } else {
+                // process the repetition logic only if all critical landmarks are visible and within the frame
+                const esito = processFrame(esercizio, statoRepRef.current, puntiStabilizzati, latoRilevato);
+                statoRepRef.current = esito.state;
+                const { event, primaryAngle, secondaryAngle } = esito;
+                ultimoBersaglioRef.current = esito.isTarget;
+
+                if (timestamp - ultimoAggiornamentoUI.current > 100) {
+                  if (Math.abs((primaryAngle ?? 0) - (angoliPrecRef.current.primary ?? 0)) > 1) {
+                    setAngles({ primary: primaryAngle, secondary: secondaryAngle });
+                    angoliPrecRef.current = { primary: primaryAngle, secondary: secondaryAngle };
+                    ultimoAggiornamentoUI.current = timestamp;
+                  }
                 }
-              }
 
-              if (event?.type === 'VALID_REP' || event?.type === 'NO_REP') {
-                const isValida = event.type === 'VALID_REP';
+                if (event?.type === 'VALID_REP' || event?.type === 'NO_REP') {
+                  const isValida = event.type === 'VALID_REP';
 
-                if (isValida) {
-                  contatoreValideRef.current += 1;
-                  setValidReps(contatoreValideRef.current);
-                  setFaults([]);
-                  messaggioHudRef.current = { type: 'VALID', text: '✓ RIPETIZIONE VALIDA', expires: performance.now() + ENGINE.HUD_VALID_MS };
-                } else {
-                  contatoreNonValideRef.current += 1;
-                  setNoReps(contatoreNonValideRef.current);
-                  setFaults(event.faults);
-                  messaggioHudRef.current = { type: 'INVALID', text: `NO REP: ${event.faults.join(' - ')}`, expires: performance.now() + ENGINE.HUD_INVALID_MS };
+                  if (isValida) {
+                    contatoreValideRef.current += 1;
+                    setValidReps(contatoreValideRef.current);
+                    setFaults([]);
+                    messaggioHudRef.current = { type: 'VALID', text: '✓ RIPETIZIONE VALIDA', expires: performance.now() + ENGINE.HUD_VALID_MS };
+                  } else {
+                    contatoreNonValideRef.current += 1;
+                    setNoReps(contatoreNonValideRef.current);
+                    setFaults(event.faults);
+                    messaggioHudRef.current = { type: 'INVALID', text: `NO REP: ${event.faults.join(' - ')}`, expires: performance.now() + ENGINE.HUD_INVALID_MS };
+                  }
                 }
-              }
+              } // end of visibility check
+
             } else {
               framePersiRef.current++;
               if (framePersiRef.current > ENGINE.TRACKING_LOST_FRAMES) {

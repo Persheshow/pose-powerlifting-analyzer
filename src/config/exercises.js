@@ -10,7 +10,7 @@ export const ESERCIZI = {
   SQUAT: {
     thresholds: {
       bottomKnee: 85, topKnee: 160, minAttemptKnee: 140,
-      minRepDurationMs: 1000, cooldownMs: 800,
+      cooldownMs: 800,
     },
     landmarks: {
       LEFT: { shoulder: 11, hip: 23, knee: 25, ankle: 27 },
@@ -29,8 +29,8 @@ export const ESERCIZI = {
   },
   OVERHEAD_PRESS: {
     thresholds: {
-      topElbow: 155, bottomElbow: 140, minAttemptElbow: 130,
-      minRepDurationMs: 800, cooldownMs: 800,
+      topElbow: 145, bottomElbow: 140, minAttemptElbow: 130,
+      cooldownMs: 800,
     },
     landmarks: {
       LEFT: { shoulder: 11, elbow: 13, wrist: 15, hip: 23, knee: 25, ankle: 27 },

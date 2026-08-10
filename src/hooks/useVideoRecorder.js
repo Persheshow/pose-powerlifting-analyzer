@@ -51,7 +51,7 @@ export function useVideoRecorder(canvasRef, setIsRecording) {
     const startRecording = useCallback(() => {
         if (!canvasRef.current) return;
 
-        const flusso = canvasRef.current.captureStream(30);
+        const flusso = canvasRef.current.captureStream();
         const tipoSupportato = scegliTipoSupportato();
         tipoSceltoRef.current = tipoSupportato;
 
@@ -84,7 +84,7 @@ export function useVideoRecorder(canvasRef, setIsRecording) {
 
             pezziVideoRef.current = [];
         };
-        registratoreRef.current.start(1000);
+        registratoreRef.current.start();
         setIsRecording(true);
     }, [canvasRef, setIsRecording]);
 

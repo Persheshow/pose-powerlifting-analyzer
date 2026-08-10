@@ -61,31 +61,9 @@ export function createInitialState() {
       lowestKneeAngle: 180,
       lowestElbowAngle: 180,
       lowestHipAngle: 180,
-      fastRepCount: 0,
-      lastFastRepTime: 0,
       targetReached: false,
     },
   };
-}
-
-/**
- * Handle rapid repetition detection and emit a warning event when the threshold is exceeded.
- * @param {Object} m - Metric object tracking fast rep counts.
- * @param {number} adesso - Current timestamp.
- * @param {string} messaggio - Message to dispatch if repeated too fast.
- */
-function gestisciOverlayVeloce(m, adesso, messaggio) {
-  if (adesso - (m.lastFastRepTime || 0) > ENGINE.FAST_REP_WINDOW_MS) {
-    m.fastRepCount = 0;
-  }
-
-  m.fastRepCount = (m.fastRepCount || 0) + 1;
-  m.lastFastRepTime = adesso;
-
-  if (m.fastRepCount >= ENGINE.FAST_REP_TRIGGER_COUNT) {
-    window.dispatchEvent(new CustomEvent('execution_error', { detail: messaggio }));
-    m.fastRepCount = 0;
-  }
 }
 
 /**
@@ -259,7 +237,6 @@ export function processSquat(stato, landmarks, lato) {
     controllaProfondita();
 
     if (angoloGinocchio > cfg.topKnee) {
-      const durataRep = adesso - m.repStartTime;
 
       if (m.lowestKneeAngle > cfg.minAttemptKnee) {
         stato.movementState = 'STANDING';
@@ -268,19 +245,6 @@ export function processSquat(stato, landmarks, lato) {
         stato.lastAngleHistory = [];
         return { state: stato, event: null, primaryAngle: angoloGinocchio, secondaryAngle: stato.smoothedSecondary, isTarget: false };
       }
-
-      if (durataRep < cfg.minRepDurationMs) {
-        gestisciOverlayVeloce(m, adesso, 'ESECUZIONI TROPPO VELOCI');
-        evento = { type: 'NO_REP', faults: ['Mancato superamento del parallelo'] };
-        stato.movementState = 'STANDING';
-        m.deepEnough = false;
-        m.lowestKneeAngle = 180;
-        stato.lastAngleHistory = [];
-        m.cooldownUntil = adesso + cfg.cooldownMs;
-        return { state: stato, event: evento, primaryAngle: angoloGinocchio, secondaryAngle: stato.smoothedSecondary, isTarget: false };
-      }
-
-      m.fastRepCount = 0;
 
       evento = m.deepEnough
         ? { type: 'VALID_REP', faults: [] }
@@ -324,8 +288,8 @@ export function processDeadlift(stato, landmarks, lato) {
   const angoloGinocchio = stato.smoothedSecondary;
   const m = stato.metrics;
 
-  const lockoutGinocchio = (cfg.erectKnee || 165) - 25; // circa 140°
-  const lockoutAnca = (cfg.erectHip || 165) - 20; // circa 145°
+  const lockoutGinocchio = (cfg.erectKnee || 165) - 25;
+  const lockoutAnca = (cfg.erectHip || 165) - 20;
 
   const eretto = angoloGinocchio > lockoutGinocchio && angoloAnca > lockoutAnca;
 
@@ -424,21 +388,6 @@ export function processOverheadPress(stato, landmarks, lato) {
   }
   else if (stato.movementState === 'ASCENDING') {
     if (angoloGomito > cfg.topElbow) {
-      const durataRep = adesso - m.repStartTime;
-
-      if (durataRep < cfg.minRepDurationMs) {
-        gestisciOverlayVeloce(m, adesso, 'ESECUZIONI TROPPO VELOCI');
-        evento = { type: 'NO_REP', faults: ['Spinta troppo veloce'] };
-        stato.movementState = 'STANDING';
-        m.lowestElbowAngle = 180;
-        stato.lastAngleHistory = [];
-        stato.lastAngle = angoloGomito;
-        m.cooldownUntil = adesso + cfg.cooldownMs;
-        m.targetReached = false;
-        return { state: stato, event: evento, primaryAngle: angoloGomito, secondaryAngle: angoloTronco, isTarget: false };
-      }
-
-      m.fastRepCount = 0;
 
       if (m.lowestElbowAngle > cfg.minAttemptElbow) {
         stato.movementState = 'STANDING';
