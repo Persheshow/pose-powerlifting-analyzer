@@ -5,15 +5,6 @@ import { drawSkeleton, drawHUD } from '../utils/canvasRenderer';
 import { determinaLatoInquadrato, smoothLandmarksCoordinates } from '../utils/poseUtils';
 import { ESERCIZI, ENGINE } from '../config/exercises';
 
-/**
- * Custom React hook that initializes MediaPipe pose tracking and updates exercise state.
- * @param {string} esercizio - Key of the exercise to track (e.g., 'SQUAT', 'DEADLIFT', 'OVERHEAD_PRESS').
- * @param {boolean} attivo - Whether the pose tracking is active.
- * @param {string} latoCamera - Camera facing mode ('user' for front camera, 'environment' for back camera).
- * @param {boolean} registrazioneAttiva - Whether recording is active (used to control inference and rendering).
- * @param {string|null} videoUrl - Optional URL of a video to use instead of the live camera feed.
- * @returns {Object} - Refs and state variables for video, canvas, loading status, tracking status, errors, rep counts, faults, angles, and a reset function.
- */
 export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, videoUrl) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
@@ -35,6 +26,7 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
   const contatoreValideRef = useRef(0);
   const contatoreNonValideRef = useRef(0);
   const messaggioHudRef = useRef(null);
+  
   const [isLoading, setIsLoading] = useState(true);
   const [isTrackingLost, setIsTrackingLost] = useState(false);
   const [error, setError] = useState(null);
@@ -43,7 +35,6 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
   const [faults, setFaults] = useState([]);
   const [angles, setAngles] = useState({ primary: null, secondary: null });
 
-  // Reset the internal state and UI counters whenever the exercise, active status, camera side, or video URL changes.
   useEffect(() => {
     statoRepRef.current = createInitialState();
     angoliPrecRef.current = { primary: null, secondary: null };
@@ -60,13 +51,11 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
     setIsTrackingLost(false);
   }, [esercizio, attivo, latoCamera, videoUrl]);
 
-  // Update the recording reference whenever the recording status changes, and reset the state if recording starts.
   useEffect(() => {
     registrazioneRef.current = registrazioneAttiva;
     if (registrazioneAttiva) reset();
   }, [registrazioneAttiva]);
 
-  // Load the MediaPipe PoseLandmarker model asynchronously when the component mounts, and clean up on unmount.
   useEffect(() => {
     let componenteMontato = true;
 
@@ -116,7 +105,6 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
     };
   }, []);
 
-  // Start the camera or load the video when the component mounts or when the active status, camera side, or video URL changes.
   useEffect(() => {
     if (!attivo) return;
     const currentVideo = videoRef.current;
@@ -142,8 +130,8 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
           const stream = await navigator.mediaDevices.getUserMedia({
             video: {
               facingMode: latoCamera,
-              width: { ideal: ENGINE.CAMERA_WIDTH_IDEAL || 640 },
-              height: { ideal: ENGINE.CAMERA_HEIGHT_IDEAL || 480 },
+              width: { ideal: ENGINE?.CAMERA_WIDTH_IDEAL || 640 },
+              height: { ideal: ENGINE?.CAMERA_HEIGHT_IDEAL || 480 },
               frameRate: { ideal: 30, max: 60 }
             },
             audio: false,
@@ -166,7 +154,6 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
     }
   }, [attivo, latoCamera, videoUrl]);
 
-  // Main loop
   useEffect(() => {
     if (!attivo) return;
 
@@ -194,36 +181,30 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         ctx.restore();
 
-        if (!registrazioneRef.current) {
-          drawHUD(ctx, canvas.width, canvas.height, contatoreValideRef.current, null, false, null);
-          frameIdRef.current = requestAnimationFrame(ciclo);
-          return;
-        }
-
         if (
           isNewFrame &&
           !video.paused &&
           !isProcessingRef.current &&
-          (timestamp - ultimoTimestampInferenza.current >= ENGINE.INTERVALLO_INFERENZA_MS)
+          (timestamp - ultimoTimestampInferenza.current >= (ENGINE?.INTERVALLO_INFERENZA_MS || 33))
         ) {
           isProcessingRef.current = true;
           ultimoTimestampInferenza.current = timestamp;
           ultimoTempoVideoRef.current = video.currentTime;
 
           try {
-            const risultati = landmarker.detectForVideo(video, timestamp);
+            // Usa performance.now() per garantire sempre l'aumento temporale a MediaPipe
+            const now = performance.now();
+            const risultati = landmarker.detectForVideo(video, now);
 
             if (risultati.landmarks?.length > 0) {
               framePersiRef.current = 0;
-              setIsTrackingLost(prev => prev ? false : prev);
+              setIsTrackingLost(false);
 
               const puntiGrezzi = risultati.landmarks[0];
-
-              // EMA stabilization
               const puntiStabilizzati = smoothLandmarksCoordinates(
                 puntiGrezzi,
                 smoothedLandmarksRef.current,
-                0.5 // smoothing factor
+                0.5 
               );
               smoothedLandmarksRef.current = puntiStabilizzati;
               ultimoPuntiRef.current = puntiStabilizzati;
@@ -231,62 +212,41 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
               const latoRilevato = determinaLatoInquadrato(puntiStabilizzati);
               ultimoLatoRef.current = latoRilevato;
 
-              // ensure all critical landmarks are visible and within the frame before processing the repetition logic
-              const indiciNodiCritici = Object.values(ESERCIZI[esercizio].landmarks[latoRilevato]);
-              const puntiCritici = indiciNodiCritici.map(indice => puntiStabilizzati[indice]);
-              const tuttiVisibili = puntiCritici.every(p => p && p.visibility >= ENGINE.VISIBILITY_THRESHOLD);
-              const tuttiDentroFrame = puntiCritici.every(p => p && p.x >= 0.0 && p.x <= 1.0 && p.y >= 0.0 && p.y <= 1.0);
-              const isInquadraturaValida = indiciNodiCritici.every(indice => {
-                const p = puntiStabilizzati[indice];
-                return p &&
-                  p.visibility >= ENGINE.VISIBILITY_THRESHOLD &&
-                  p.x >= 0.0 && p.x <= 1.0 &&
-                  p.y >= 0.0 && p.y <= 1.0;
-              });
+              const esito = processFrame(esercizio, statoRepRef.current, puntiStabilizzati, latoRilevato);
 
-              if (!isInquadraturaValida) {
-                // If the critical landmarks are not all visible or not all within the frame, display a warning message on the HUD and skip the repetition processing for this frame.
-                messaggioHudRef.current = {
-                  type: 'INVALID',
-                  text: 'ARTICOLAZIONI NON VISIBILI: ALLONTANARSI',
-                  expires: performance.now() + 500
-                };
-              } else {
-                // process the repetition logic only if all critical landmarks are visible and within the frame
-                const esito = processFrame(esercizio, statoRepRef.current, puntiStabilizzati, latoRilevato);
+              // 1. Aggiorna sempre gli angoli a schermo (permette all'utente di centrarsi)
+              if (timestamp - ultimoAggiornamentoUI.current > 100) {
+                if (Math.abs((esito.primaryAngle ?? 0) - (angoliPrecRef.current.primary ?? 0)) > 1) {
+                  setAngles({ primary: esito.primaryAngle, secondary: esito.secondaryAngle });
+                  angoliPrecRef.current = { primary: esito.primaryAngle, secondary: esito.secondaryAngle };
+                  ultimoAggiornamentoUI.current = timestamp;
+                }
+              }
+
+              // 2. Avanza di stato e salva le ripetizioni SOLO se stiamo registrando
+              if (registrazioneRef.current) {
                 statoRepRef.current = esito.state;
-                const { event, primaryAngle, secondaryAngle } = esito;
                 ultimoBersaglioRef.current = esito.isTarget;
 
-                if (timestamp - ultimoAggiornamentoUI.current > 100) {
-                  if (Math.abs((primaryAngle ?? 0) - (angoliPrecRef.current.primary ?? 0)) > 1) {
-                    setAngles({ primary: primaryAngle, secondary: secondaryAngle });
-                    angoliPrecRef.current = { primary: primaryAngle, secondary: secondaryAngle };
-                    ultimoAggiornamentoUI.current = timestamp;
-                  }
-                }
-
-                if (event?.type === 'VALID_REP' || event?.type === 'NO_REP') {
-                  const isValida = event.type === 'VALID_REP';
-
+                if (esito.event?.type === 'VALID_REP' || esito.event?.type === 'NO_REP') {
+                  const isValida = esito.event.type === 'VALID_REP';
                   if (isValida) {
                     contatoreValideRef.current += 1;
                     setValidReps(contatoreValideRef.current);
                     setFaults([]);
-                    messaggioHudRef.current = { type: 'VALID', text: '✓ RIPETIZIONE VALIDA', expires: performance.now() + ENGINE.HUD_VALID_MS };
+                    messaggioHudRef.current = { type: 'VALID', text: '✓ RIPETIZIONE VALIDA', expires: performance.now() + (ENGINE?.HUD_VALID_MS || 2000) };
                   } else {
                     contatoreNonValideRef.current += 1;
                     setNoReps(contatoreNonValideRef.current);
-                    setFaults(event.faults);
-                    messaggioHudRef.current = { type: 'INVALID', text: `NO REP: ${event.faults.join(' - ')}`, expires: performance.now() + ENGINE.HUD_INVALID_MS };
+                    setFaults(esito.event.faults);
+                    messaggioHudRef.current = { type: 'INVALID', text: `NO REP: ${esito.event.faults.join(' - ')}`, expires: performance.now() + (ENGINE?.HUD_INVALID_MS || 3000) };
                   }
                 }
-              } // end of visibility check
-
+              }
             } else {
               framePersiRef.current++;
-              if (framePersiRef.current > ENGINE.TRACKING_LOST_FRAMES) {
-                setIsTrackingLost(prev => !prev ? true : prev);
+              if (framePersiRef.current > (ENGINE?.TRACKING_LOST_FRAMES || 15)) {
+                setIsTrackingLost(true);
               }
             }
           } catch (err) {
@@ -298,6 +258,7 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
 
         const erroreLampeggiante = messaggioHudRef.current && performance.now() < messaggioHudRef.current.expires && messaggioHudRef.current.type === 'INVALID';
 
+        // Disegna lo scheletro continuamente
         if (ultimoPuntiRef.current) {
           ctx.save();
           if (specchiato) {
@@ -314,8 +275,8 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
           canvas.height,
           contatoreValideRef.current,
           messaggioHudRef.current,
-          framePersiRef.current > ENGINE.TRACKING_LOST_FRAMES,
-          statoRepRef.current.lastAngle
+          isTrackingLost,
+          angoliPrecRef.current.primary
         );
       }
       frameIdRef.current = requestAnimationFrame(ciclo);
@@ -326,24 +287,19 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
   }, [esercizio, attivo, latoCamera, videoUrl]);
 
   /**
-   * Reset the current pose tracking session state and UI counters.
+   * Reset the current pose tracking logical state (without clearing visual skeleton).
    */
   function reset() {
     statoRepRef.current = createInitialState();
-    angoliPrecRef.current = { primary: null, secondary: null };
-    framePersiRef.current = 0;
-    smoothedLandmarksRef.current = null;
-    ultimoPuntiRef.current = null;
-
     contatoreValideRef.current = 0;
     contatoreNonValideRef.current = 0;
     messaggioHudRef.current = null;
+    ultimoBersaglioRef.current = false;
 
     setValidReps(0);
     setNoReps(0);
     setFaults([]);
-    setAngles({ primary: null, secondary: null });
-    setIsTrackingLost(false);
+    // Non cancelliamo l'ultimoPuntiRef qui, per mantenere l'estetica visiva intatta durante lo scatto del REC
   }
 
   return { videoRef, canvasRef, isLoading, isTrackingLost, error, validReps, noReps, faults, angles, reset };
