@@ -5,6 +5,15 @@ import { drawSkeleton, drawHUD } from '../utils/canvasRenderer';
 import { determinaLatoInquadrato, smoothLandmarksCoordinates } from '../utils/poseUtils';
 import { ESERCIZI, ENGINE } from '../config/exercises';
 
+/**
+ * Custom React hook that initializes MediaPipe pose tracking and updates exercise state.
+ * @param {string} esercizio - Key of the exercise to track (e.g., 'SQUAT', 'DEADLIFT', 'OVERHEAD_PRESS').
+ * @param {boolean} attivo - Whether the pose tracking is active.
+ * @param {string} latoCamera - Camera facing mode ('user' for front camera, 'environment' for back camera).
+ * @param {boolean} registrazioneAttiva - Whether recording is active (used to control inference and rendering).
+ * @param {string|null} videoUrl - Optional URL of a video to use instead of the live camera feed.
+ * @returns {Object} - Refs and state variables for video, canvas, loading status, tracking status, errors, rep counts, faults, angles, and a reset function.
+ */
 export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, videoUrl) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
@@ -26,7 +35,7 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
   const contatoreValideRef = useRef(0);
   const contatoreNonValideRef = useRef(0);
   const messaggioHudRef = useRef(null);
-  
+
   const [isLoading, setIsLoading] = useState(true);
   const [isTrackingLost, setIsTrackingLost] = useState(false);
   const [error, setError] = useState(null);
@@ -35,6 +44,7 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
   const [faults, setFaults] = useState([]);
   const [angles, setAngles] = useState({ primary: null, secondary: null });
 
+  // Reset the internal state and UI counters whenever the exercise, active status, camera side, or video URL changes.
   useEffect(() => {
     statoRepRef.current = createInitialState();
     angoliPrecRef.current = { primary: null, secondary: null };
@@ -51,11 +61,13 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
     setIsTrackingLost(false);
   }, [esercizio, attivo, latoCamera, videoUrl]);
 
+  // Update the recording reference whenever the recording status changes, and reset the state if recording starts.
   useEffect(() => {
     registrazioneRef.current = registrazioneAttiva;
     if (registrazioneAttiva) reset();
   }, [registrazioneAttiva]);
 
+  // Load the MediaPipe PoseLandmarker model asynchronously when the component mounts, and clean up on unmount.
   useEffect(() => {
     let componenteMontato = true;
 
@@ -105,6 +117,7 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
     };
   }, []);
 
+  // Start the camera or load the video when the component mounts or when the active status, camera side, or video URL changes.
   useEffect(() => {
     if (!attivo) return;
     const currentVideo = videoRef.current;
@@ -154,6 +167,7 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
     }
   }, [attivo, latoCamera, videoUrl]);
 
+  // Main loop
   useEffect(() => {
     if (!attivo) return;
 
@@ -192,7 +206,7 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
           ultimoTempoVideoRef.current = video.currentTime;
 
           try {
-            // Usa performance.now() per garantire sempre l'aumento temporale a MediaPipe
+            // Usa performance.now() per garantire sempre l'aumento temporale a MediaPipe (dal commit locale)
             const now = performance.now();
             const risultati = landmarker.detectForVideo(video, now);
 
@@ -201,10 +215,12 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
               setIsTrackingLost(false);
 
               const puntiGrezzi = risultati.landmarks[0];
+
+              // EMA stabilization
               const puntiStabilizzati = smoothLandmarksCoordinates(
                 puntiGrezzi,
                 smoothedLandmarksRef.current,
-                0.5 
+                0.5 // smoothing factor
               );
               smoothedLandmarksRef.current = puntiStabilizzati;
               ultimoPuntiRef.current = puntiStabilizzati;
@@ -212,37 +228,58 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
               const latoRilevato = determinaLatoInquadrato(puntiStabilizzati);
               ultimoLatoRef.current = latoRilevato;
 
-              const esito = processFrame(esercizio, statoRepRef.current, puntiStabilizzati, latoRilevato);
+              // Ensure all critical landmarks are visible and within the frame before processing the repetition logic
+              const indiciNodiCritici = Object.values(ESERCIZI[esercizio].landmarks[latoRilevato]);
+              const puntiCritici = indiciNodiCritici.map(indice => puntiStabilizzati[indice]);
+              const isInquadraturaValida = indiciNodiCritici.every(indice => {
+                const p = puntiStabilizzati[indice];
+                return p &&
+                  p.visibility >= ENGINE.VISIBILITY_THRESHOLD &&
+                  p.x >= 0.0 && p.x <= 1.0 &&
+                  p.y >= 0.0 && p.y <= 1.0;
+              });
 
-              // 1. Aggiorna sempre gli angoli a schermo (permette all'utente di centrarsi)
-              if (timestamp - ultimoAggiornamentoUI.current > 100) {
-                if (Math.abs((esito.primaryAngle ?? 0) - (angoliPrecRef.current.primary ?? 0)) > 1) {
-                  setAngles({ primary: esito.primaryAngle, secondary: esito.secondaryAngle });
-                  angoliPrecRef.current = { primary: esito.primaryAngle, secondary: esito.secondaryAngle };
-                  ultimoAggiornamentoUI.current = timestamp;
-                }
-              }
+              if (!isInquadraturaValida) {
+                // If the critical landmarks are not all visible or not all within the frame, display a warning message on the HUD and skip the repetition processing for this frame.
+                messaggioHudRef.current = {
+                  type: 'INVALID',
+                  text: 'ARTICOLAZIONI NON VISIBILI: ALLONTANARSI',
+                  expires: performance.now() + 500
+                };
+              } else {
+                // Process the repetition logic only if all critical landmarks are visible and within the frame
+                const esito = processFrame(esercizio, statoRepRef.current, puntiStabilizzati, latoRilevato);
 
-              // 2. Avanza di stato e salva le ripetizioni SOLO se stiamo registrando
-              if (registrazioneRef.current) {
-                statoRepRef.current = esito.state;
-                ultimoBersaglioRef.current = esito.isTarget;
-
-                if (esito.event?.type === 'VALID_REP' || esito.event?.type === 'NO_REP') {
-                  const isValida = esito.event.type === 'VALID_REP';
-                  if (isValida) {
-                    contatoreValideRef.current += 1;
-                    setValidReps(contatoreValideRef.current);
-                    setFaults([]);
-                    messaggioHudRef.current = { type: 'VALID', text: '✓ RIPETIZIONE VALIDA', expires: performance.now() + (ENGINE?.HUD_VALID_MS || 2000) };
-                  } else {
-                    contatoreNonValideRef.current += 1;
-                    setNoReps(contatoreNonValideRef.current);
-                    setFaults(esito.event.faults);
-                    messaggioHudRef.current = { type: 'INVALID', text: `NO REP: ${esito.event.faults.join(' - ')}`, expires: performance.now() + (ENGINE?.HUD_INVALID_MS || 3000) };
+                // 1. Aggiorna sempre gli angoli a schermo (permette all'utente di centrarsi) (dal commit locale)
+                if (timestamp - ultimoAggiornamentoUI.current > 100) {
+                  if (Math.abs((esito.primaryAngle ?? 0) - (angoliPrecRef.current.primary ?? 0)) > 1) {
+                    setAngles({ primary: esito.primaryAngle, secondary: esito.secondaryAngle });
+                    angoliPrecRef.current = { primary: esito.primaryAngle, secondary: esito.secondaryAngle };
+                    ultimoAggiornamentoUI.current = timestamp;
                   }
                 }
-              }
+
+                // 2. Avanza di stato e salva le ripetizioni SOLO se stiamo registrando (dal commit locale)
+                if (registrazioneRef.current) {
+                  statoRepRef.current = esito.state;
+                  ultimoBersaglioRef.current = esito.isTarget;
+
+                  if (esito.event?.type === 'VALID_REP' || esito.event?.type === 'NO_REP') {
+                    const isValida = esito.event.type === 'VALID_REP';
+                    if (isValida) {
+                      contatoreValideRef.current += 1;
+                      setValidReps(contatoreValideRef.current);
+                      setFaults([]);
+                      messaggioHudRef.current = { type: 'VALID', text: '✓ RIPETIZIONE VALIDA', expires: performance.now() + (ENGINE?.HUD_VALID_MS || 2000) };
+                    } else {
+                      contatoreNonValideRef.current += 1;
+                      setNoReps(contatoreNonValideRef.current);
+                      setFaults(esito.event.faults);
+                      messaggioHudRef.current = { type: 'INVALID', text: `NO REP: ${esito.event.faults.join(' - ')}`, expires: performance.now() + (ENGINE?.HUD_INVALID_MS || 3000) };
+                    }
+                  }
+                }
+              } // end of visibility check
             } else {
               framePersiRef.current++;
               if (framePersiRef.current > (ENGINE?.TRACKING_LOST_FRAMES || 15)) {
