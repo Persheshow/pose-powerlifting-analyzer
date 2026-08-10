@@ -34,12 +34,17 @@ export function determinaLatoInquadrato(landmarks) {
  *
  * @param {Array<{x:number, y:number, z?:number, visibility?:number}>} currentLandmarks - Raw landmarks from current frame.
  * @param {Array<{x:number, y:number, z?:number, visibility?:number}>|null} prevLandmarks - Smoothed landmarks from previous frame.
- * @param {number} [alpha=0.5] - Smoothing factor
- * @returns {Array<{x:number, y:number, z?:number, visibility?:number}>} - Smoothed landmarks.
+ * @param {number} [alpha=0.5] - Smoothing factor.
+ * @param {number} [freezeVisibility=0.55] - Confidence below which the last stable coordinate is kept.
+ * @returns {Array<{x:number, y:number, z?:number, visibility?:number, validationVisibility?:number, frozen?:boolean}>} - Smoothed landmarks.
  */
-export function smoothLandmarksCoordinates(currentLandmarks, prevLandmarks, alpha = 0.5) {
+export function smoothLandmarksCoordinates(currentLandmarks, prevLandmarks, alpha = 0.5, freezeVisibility = 0.55) {
     if (!prevLandmarks || prevLandmarks.length !== currentLandmarks.length) {
-        return currentLandmarks;
+        return currentLandmarks.map((curr) => ({
+            ...curr,
+            validationVisibility: curr?.visibility ?? 1,
+            frozen: false,
+        }));
     }
 
     const beta = 1 - alpha;
@@ -47,8 +52,17 @@ export function smoothLandmarksCoordinates(currentLandmarks, prevLandmarks, alph
     return currentLandmarks.map((curr, idx) => {
         const prev = prevLandmarks[idx];
 
-        if (!curr || !prev || (curr.visibility !== undefined && curr.visibility < 0.5)) {
+        if (!curr || !prev) {
             return curr;
+        }
+
+        if (curr.visibility !== undefined && curr.visibility < freezeVisibility) {
+            return {
+                ...prev,
+                visibility: curr.visibility,
+                validationVisibility: freezeVisibility,
+                frozen: true,
+            };
         }
 
         return {
@@ -56,6 +70,8 @@ export function smoothLandmarksCoordinates(currentLandmarks, prevLandmarks, alph
             x: curr.x * alpha + prev.x * beta,
             y: curr.y * alpha + prev.y * beta,
             z: curr.z !== undefined && prev.z !== undefined ? curr.z * alpha + prev.z * beta : curr.z,
+            validationVisibility: curr.visibility ?? 1,
+            frozen: false,
         };
     });
 }

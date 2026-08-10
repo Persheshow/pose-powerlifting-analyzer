@@ -4,77 +4,87 @@
 ![Vite](https://img.shields.io/badge/vite-%23646CFF.svg?style=for-the-badge&logo=vite&logoColor=white)
 ![MediaPipe](https://img.shields.io/badge/MediaPipe-00B4D8?style=for-the-badge)
 
-Web application for real-time kinematic analysis and automatic recognition of valid repetitions in fundamental powerlifting exercises (Squat, Deadlift, Overhead Press).
+Web application mobile first per l'analisi cinematica e il riconoscimento automatico di ripetizioni valide negli esercizi Squat, Stacco da terra e Pressa militare. L'app usa MediaPipe Pose direttamente nel browser e non invia frame video a server esterni.
 
 ![Application Preview](./docs/screenshot.png)
 
-## Project Description
-This software tracks human topological landmarks directly in the browser, without sending video frames to external servers. The objective is to validate powerlifting lifts by comparing the user's joint angles with the thresholds established by standard sports regulations.
+## Descrizione
 
-## System Architecture
-The project is divided into four logical modules:
+Il sistema stima 33 landmark corporei tramite MediaPipe Pose, calcola gli angoli articolari rilevanti e usa una macchina a stati finiti per classificare ogni ripetizione come `VALID_REP` o `NO_REP`. L'obiettivo è fornire un prototipo riproducibile per tesi, demo e analisi qualitativa dell'esecuzione.
 
-* **Frontend UI (`App.jsx`):** User interface developed in React. It manages exercise selection, file uploading, webcam access, and the display of the acquisition log.
-* **Computer Vision (`usePose.js`):** Module dedicated to the initialization and execution of MediaPipe Pose. It extracts the coordinates (x, y, visibility) of 33 body landmarks for each processed video frame.
-* **Validation Logic (`repLogic.js`):** Implementation of a Finite State Machine (FSM). It calculates joint angles using trigonometric vectors and determines the state of the movement (e.g., `STANDING`, `DESCENDING`, `ASCENDING`, `SETUP`, `LIFTING`). It emits validation events (`VALID_REP` or `NO_REP`) based on predefined tolerance thresholds.
-* **Visual Rendering (`canvasRenderer.js`):** Manages the output on the HTML5 Canvas. It superimposes the vector skeleton onto the original video and changes the color of the primary joint point (red during execution, green upon reaching the geometric target).
+## Architettura
 
-## Getting Started
+Il progetto è diviso in moduli principali:
 
-To run the application in a local development environment, you must have [Node.js](https://nodejs.org/) installed.
+* **Interfaccia (`App.jsx`):** selezione esercizio, target ripetizioni, accesso alla fotocamera, caricamento video e download della registrazione.
+* **Computer vision (`usePose.js`):** inizializza MediaPipe Pose, gestisce inferenza video/camera, stabilizzazione landmark e controllo dei landmark critici.
+* **Logica di validazione (`repLogic.js`):** implementa la FSM dei movimenti (`STANDING`, `DESCENDING`, `ASCENDING`, `SETUP`, `LIFTING`) e calcola gli angoli con vettori bidimensionali.
+* **Rendering (`canvasRenderer.js`):** disegna frame video, esoscheletro, HUD, conteggio rep e messaggi di validazione sul canvas.
+* **Registrazione (`useVideoRecorder.js`):** registra il canvas a 30 FPS, salva chunk periodici e scarica il formato video realmente prodotto dal browser.
 
-1. Clone the repository:
-```bash
-git clone [https://github.com/YourUsername/powerlifting-kinematics-vision.git]
+## Regole Implementate
 
-```
+### Landmark e occlusione
 
-2. Navigate to the project directory:
-```bash
-cd powerlifting-kinematics-vision
+* Ogni esercizio definisce solo i landmark necessari alla validazione tramite `requiredLandmarks`.
+* Il controllo di visibilità usa isteresi: un landmark entra nello stato valido sopra `VISIBILITY_THRESHOLD` e ne esce sotto `VISIBILITY_EXIT_THRESHOLD`.
+* Le coordinate dei landmark con bassa confidenza vengono congelate temporaneamente tramite `LANDMARK_FREEZE_VISIBILITY`, evitando jitter quando dischi o bilanciere coprono le articolazioni.
+* La `validationVisibility` è separata dalla `visibility` usata per disegnare lo scheletro, così la logica resta stabile senza mascherare graficamente l'incertezza del tracking.
 
-```
+### Squat
 
+* Landmark principali: anca, ginocchio, caviglia.
+* La rep parte quando il ginocchio scende sotto la soglia di movimento.
+* La profondità è valida quando l'angolo del ginocchio raggiunge `bottomKnee`.
+* La ripetizione viene chiusa in risalita quando il ginocchio torna sopra `topKnee`.
 
-3. Install the dependencies:
+### Stacco da terra
+
+* Landmark principali: anca, ginocchio, caviglia; la spalla può essere stimata o recuperata dal lato opposto in caso di occlusione.
+* La rep è valida quando anca e ginocchio raggiungono il lockout.
+* Il cooldown evita doppi conteggi nella stessa alzata.
+
+### Pressa militare
+
+* Landmark principali: spalla, polso, anca, ginocchio e caviglia; il gomito può essere stimato in caso di occlusione.
+* La rep è riconosciuta quando il movimento passa da discesa a risalita e raggiunge l'estensione del gomito.
+* In presenza di occlusione del disco, il lockout può essere accettato con soglia gomito più permissiva se il polso risulta sopra la spalla.
+
+## Avvio Locale
+
+Serve [Node.js](https://nodejs.org/).
+
 ```bash
 npm install
-
-```
-
-
-4. Start the development server:
-```bash
 npm run dev
-
 ```
 
+Verifica produzione:
 
+```bash
+npm run lint
+npm run build
+```
 
-## App User Guide
+## Uso
 
-### Acquisition Modes
+### Modalità di acquisizione
 
-The application supports two video input streams:
+1. **Fotocamera:** usa webcam o camera mobile, con timer iniziale configurabile.
+2. **Carica video:** analizza file `.mp4`, `.webm` o `.mov` già registrati.
 
-1. **Camera (Live):** Utilizes the computer's webcam or the mobile device's camera (front/rear). Pressing "INIZIA ESERCIZIO" (START EXERCISE) triggers a timer on the screen, allowing the user to position themselves correctly within the frame.
-2. **Upload Video (File):** Allows the upload of pre-recorded `.mp4` or `.webm` files. The analysis starts immediately upon pressing the start button.
+### Feedback visivo
 
-### Visual Feedback Functionality
+Durante l'analisi il canvas mostra video, esoscheletro, angolo corrente e ripetizioni valide. Il punto articolare principale diventa verde quando viene raggiunto il target geometrico dell'esercizio.
 
-During the analysis, a graphical overlay displays the user's skeleton. The system provides instantaneous feedback via a circular indicator positioned on the key joint for the selected exercise (hip for Squat and Deadlift, elbow for Overhead Press).
+Il video esportato viene registrato dal canvas a `RECORDING_FPS` e scaricato nel formato effettivo supportato dal browser, evitando rinomine non reali tra WebM e MP4.
 
-* **Red Color:** Movement in progress; the geometric threshold has not yet been reached.
-* **Green Color:** Angle validated by the Finite State Machine (e.g., breaking the parallel in the squat or complete lockout in the deadlift). The point maintains the green color for the duration of the cooldown, confirming the validity of the repetition.
+## Contesto Accademico
 
-The upper HUD interface displays the total count of valid repetitions and the angle measured in real-time. Invalid executions are recorded in the bottom session log, specifying the cause of the error.
+Progetto sviluppato per la tesi di Laurea Triennale in Informatica.
 
-## Academic Context
+**Università degli Studi di Firenze**  
+Anno Accademico 2025/2026
 
-Project developed for the Bachelor's Degree in Computer Science Thesis.
-
-**University of Florence (Università degli Studi di Firenze)**
-Graduation Date: October 21, 2026
-
-* **Student:** Lorenzo Napolitano - lorenzo.napolitano@edu.unifi.it
-* **Thesis Supervisor:** Michele Ginolfi - michele.ginolfi@unifi.it
+* **Studente:** Lorenzo Napolitano - lorenzo.napolitano@edu.unifi.it
+* **Relatore:** Michele Ginolfi - michele.ginolfi@unifi.it

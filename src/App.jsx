@@ -96,6 +96,7 @@ export default function App() {
     pausaRegistrazione,
     riprendiRegistrazione,
   } = useVideoRecorder(canvasRef, setStaRegistrando);
+  const formatoRegistrazione = pendingRecording?.mimeType?.startsWith('video/mp4') ? 'mp4' : 'webm';
 
   const Beep = () => {
     try {
@@ -515,23 +516,12 @@ export default function App() {
 
               <button
                 onClick={() => {
-                  confermaDownload('mp4');
+                  confermaDownload(formatoRegistrazione);
                   resetConteggio();
                 }}
                 className="px-3 py-2 text-xs uppercase tracking-widest border border-[#002f6c] bg-gray-100 text-[#002f6c] rounded-none transition-none hover:bg-[#002f6c] hover:text-white cursor-pointer"
               >
-                Scarica .MP4
-              </button>
-
-              <button
-                onClick={() => {
-                  confermaDownload('webm');
-                  resetConteggio();
-                }}
-                className="px-3 py-2 text-xs uppercase tracking-widest border border-[#002f6c] bg-gray-100 text-[#002f6c] rounded-none transition-none hover:bg-[#002f6c] hover:text-white cursor-pointer"
-                title="Formato WebM nativo"
-              >
-                .WEBM
+                Scarica video (.{formatoRegistrazione.toUpperCase()})
               </button>
             </div>
 

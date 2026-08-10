@@ -1,13 +1,28 @@
 import { ESERCIZI, SMOOTHING, ENGINE } from '../config/exercises.js';
 
+const VISIBILITY_EXIT_THRESHOLD = ENGINE.VISIBILITY_EXIT_THRESHOLD ?? ENGINE.VISIBILITY_THRESHOLD;
+
+function getValidationVisibility(landmark) {
+  return landmark?.validationVisibility ?? landmark?.visibility ?? 0;
+}
+
 /**
- * Smooth the current angle.
+ * Smooth the current angle and reject physically impossible variations (jitter).
  * @param {number|null} prev - The previous smoothed angle.
  * @param {number} current - The current raw angle measurement.
  * @returns {number} - The updated smoothed angle.
  */
 export function smoothAngle(prev, current) {
   if (prev === null) return current;
+
+  const variazione = Math.abs(current - prev);
+
+  // Reject variations greater than 25 degrees between frames, as such an angular speed is physically impossible under load.
+  // This prevents jitter from causing false state transitions in the FSM.
+  if (variazione > 25) {
+    return prev; 
+  }
+
   return (current * SMOOTHING.alpha) + (prev * SMOOTHING.beta);
 }
 
@@ -77,8 +92,8 @@ function getShoulderLandmark(lm, idxPrincipale, anca) {
   const idxOpposto = idxPrincipale === 11 ? 12 : 11;
   const principale = lm[idxPrincipale];
   const opposto = lm[idxOpposto];
-  if (principale && principale.visibility > ENGINE.VISIBILITY_THRESHOLD) return principale;
-  if (opposto && opposto.visibility > ENGINE.VISIBILITY_THRESHOLD) return { ...opposto, x: 1 - opposto.x };
+  if (principale && getValidationVisibility(principale) >= VISIBILITY_EXIT_THRESHOLD) return principale;
+  if (opposto && getValidationVisibility(opposto) >= VISIBILITY_EXIT_THRESHOLD) return { ...opposto, x: 1 - opposto.x };
   return { x: anca.x, y: anca.y - 0.25, visibility: ENGINE.VISIBILITY_THRESHOLD };
 }
 
@@ -95,8 +110,8 @@ function getElbowLandmark(lm, idxPrincipale, spalla, polso) {
   const idxOpposto = idxPrincipale === 13 ? 14 : 13;
   const principale = lm[idxPrincipale];
   const opposto = lm[idxOpposto];
-  if (principale && principale.visibility > ENGINE.VISIBILITY_THRESHOLD) return principale;
-  if (opposto && opposto.visibility > ENGINE.VISIBILITY_THRESHOLD) return { ...opposto, x: 1 - opposto.x };
+  if (principale && getValidationVisibility(principale) >= VISIBILITY_EXIT_THRESHOLD) return principale;
+  if (opposto && getValidationVisibility(opposto) >= VISIBILITY_EXIT_THRESHOLD) return { ...opposto, x: 1 - opposto.x };
   if (spalla && polso) {
     return { x: (spalla.x + polso.x) / 2, y: (spalla.y + polso.y) / 2, visibility: ENGINE.VISIBILITY_THRESHOLD };
   }
@@ -167,7 +182,7 @@ function handleOcclusion(stato) {
  * @returns {Object} - An object indicating if the landmarks are visible and not occluded, and the resulting state if not.
  */
 function verificaVisibilitaEOcclusione(stato, lm, indiciRichiesti) {
-  const visibile = indiciRichiesti.every((i) => lm[i]?.visibility > ENGINE.VISIBILITY_THRESHOLD);
+  const visibile = indiciRichiesti.every((i) => getValidationVisibility(lm[i]) >= VISIBILITY_EXIT_THRESHOLD);
 
   if (!visibile) {
     const { shouldReset } = handleOcclusion(stato);
@@ -274,7 +289,7 @@ export function processDeadlift(stato, landmarks, lato) {
   const { shoulder: idxSpalla, hip, knee, ankle } = ESERCIZI.DEADLIFT.landmarks[lato];
   const lm = landmarks;
   const adesso = Date.now();
-  const guardia = verificaVisibilitaEOcclusione(stato, lm, [hip, knee]);
+  const guardia = verificaVisibilitaEOcclusione(stato, lm, [hip, knee, ankle]);
   if (!guardia.ok) return guardia.result;
 
   const spallaLm = getShoulderLandmark(lm, idxSpalla, lm[hip]);
@@ -346,7 +361,7 @@ export function processOverheadPress(stato, landmarks, lato) {
   const { shoulder: idxSpalla, elbow: idxGomito, wrist, hip, knee, ankle } = ESERCIZI.OVERHEAD_PRESS.landmarks[lato];
   const lm = landmarks;
   const adesso = Date.now();
-  const guardia = verificaVisibilitaEOcclusione(stato, lm, [idxSpalla, hip, knee, ankle]);
+  const guardia = verificaVisibilitaEOcclusione(stato, lm, [idxSpalla, wrist, hip, knee, ankle]);
   if (!guardia.ok) return guardia.result;
 
   const gomitoLm = getElbowLandmark(lm, idxGomito, lm[idxSpalla], lm[wrist]);
@@ -387,7 +402,11 @@ export function processOverheadPress(stato, landmarks, lato) {
     }
   }
   else if (stato.movementState === 'ASCENDING') {
-    if (angoloGomito > cfg.topElbow) {
+    const polsoSopraSpalla = lm[wrist].y < lm[idxSpalla].y - (cfg.wristAboveShoulderMargin ?? 0.06);
+    const lockoutStandard = angoloGomito > cfg.topElbow;
+    const lockoutConOcclusione = polsoSopraSpalla && angoloGomito > (cfg.topElbowOccluded ?? cfg.topElbow);
+
+    if (lockoutStandard || lockoutConOcclusione) {
 
       if (m.lowestElbowAngle > cfg.minAttemptElbow) {
         stato.movementState = 'STANDING';

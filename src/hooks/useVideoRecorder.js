@@ -2,8 +2,8 @@ import { useRef, useCallback, useState } from 'react';
 import { ENGINE } from '../config/exercises';
 
 const TIPI_PREFERITI = [
-    'video/webm;codecs=vp8',
     'video/mp4',
+    'video/webm;codecs=vp8',
     'video/webm;codecs=vp9',
     'video/webm',
 ];
@@ -29,6 +29,10 @@ function extractVideoFormat(tipo) {
     return 'webm';
 }
 
+function extractCleanMimeType(tipo) {
+    return tipo?.split(';')[0] || 'video/webm';
+}
+
 /**
  * Custom React hook that records a canvas stream and exposes recording controls.
  * @param {Object} canvasRef - React ref to the canvas element to record.
@@ -40,6 +44,7 @@ export function useVideoRecorder(canvasRef, setIsRecording) {
     const pezziVideoRef = useRef([]);
     const vuoleSalvareRef = useRef(true);
     const tipoSceltoRef = useRef(null);
+    const flussoRef = useRef(null);
     const riepilogoRef = useRef(null);
 
     const [pendingRecording, setPendingRecording] = useState(null);
@@ -51,7 +56,9 @@ export function useVideoRecorder(canvasRef, setIsRecording) {
     const startRecording = useCallback(() => {
         if (!canvasRef.current) return;
 
-        const flusso = canvasRef.current.captureStream();
+        const fpsRegistrazione = ENGINE.RECORDING_FPS || 30;
+        const flusso = canvasRef.current.captureStream(fpsRegistrazione);
+        flussoRef.current = flusso;
         const tipoSupportato = scegliTipoSupportato();
         tipoSceltoRef.current = tipoSupportato;
 
@@ -73,18 +80,20 @@ export function useVideoRecorder(canvasRef, setIsRecording) {
         registratoreRef.current.onstop = () => {
             if (vuoleSalvareRef.current && pezziVideoRef.current.length > 0) {
                 const tipoEffettivo = tipoSceltoRef.current || registratoreRef.current?.mimeType || 'video/webm';
-                const tipoPulito = tipoEffettivo.split(';')[0];
+                const tipoPulito = extractCleanMimeType(tipoEffettivo);
                 const fileVideo = new Blob(pezziVideoRef.current, { type: tipoPulito });
                 const estensione = extractVideoFormat(tipoEffettivo);
                 const nomeFile = `analisi_cinematica_${new Date().toISOString().slice(0, 10)}.${estensione}`;
-                const registrazione = { blob: fileVideo, filename: nomeFile, riepilogo: riepilogoRef.current };
+                const registrazione = { blob: fileVideo, filename: nomeFile, mimeType: tipoPulito, riepilogo: riepilogoRef.current };
                 pendingRecordingRef.current = registrazione;
                 setPendingRecording(registrazione);
             }
 
             pezziVideoRef.current = [];
+            flussoRef.current?.getTracks().forEach((track) => track.stop());
+            flussoRef.current = null;
         };
-        registratoreRef.current.start();
+        registratoreRef.current.start(ENGINE.RECORDING_TIMESLICE_MS || 1000);
         setIsRecording(true);
     }, [canvasRef, setIsRecording]);
 
@@ -97,6 +106,9 @@ export function useVideoRecorder(canvasRef, setIsRecording) {
         if (registratoreRef.current && (registratoreRef.current.state === "recording" || registratoreRef.current.state === "paused")) {
             vuoleSalvareRef.current = salvaVideo;
             riepilogoRef.current = riepilogo;
+            if (registratoreRef.current.state === "recording") {
+                registratoreRef.current.requestData();
+            }
             registratoreRef.current.stop();
             setIsRecording(false);
         }
@@ -128,8 +140,9 @@ export function useVideoRecorder(canvasRef, setIsRecording) {
         const corrente = pendingRecordingRef.current;
         if (!corrente) return;
 
-        const estensione = formatoScelto === 'mp4' ? 'mp4' : 'webm';
-        const mimeType = formatoScelto === 'mp4' ? 'video/mp4' : 'video/webm';
+        const formatoEffettivo = extractVideoFormat(corrente.mimeType);
+        const estensione = formatoScelto === formatoEffettivo ? formatoScelto : formatoEffettivo;
+        const mimeType = corrente.mimeType || (estensione === 'mp4' ? 'video/mp4' : 'video/webm');
         const blobCondivisibile = new Blob([corrente.blob], { type: mimeType });
         const nomeFile = `analisi_cinematica_${new Date().toISOString().slice(0, 10)}.${estensione}`;
         const linkTemp = URL.createObjectURL(blobCondivisibile);
