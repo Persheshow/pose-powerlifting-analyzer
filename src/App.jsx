@@ -217,10 +217,10 @@ export default function App() {
               <h3 className="text-xs uppercase tracking-widest mb-1">0. Istruzioni</h3>
               <ul className="text-xs md:text-sm text-gray-700 space-y-2 list-none">
                 <li>
-                  <span className="text-xs tracking-widest mb-1 font-bold">i)</span> Inquadrare con un'angolazione sagittale, evitando i 90° se si utilizzano dischi che potrebbero coprire le articolazioni, e mantenendo una distanza di circa 2-3 metri dall'atleta, in modo che l'intero corpo sia visibile e centrato nel frame.
+                  <span className="text-xs tracking-widest mb-1 font-bold">i)</span> Inquadrare con un'angolazione sagittale, evitando i 90° se si utilizzano dischi che potrebbero coprire le articolazioni, e mantenendo una distanza in modo che l'intero corpo sia visibile.
                 </li>
                 <li>
-                  <span className="text-xs tracking-widest mb-1 font-bold">ii)</span> Assicurarsi che solo l'atleta sia presente nel video ed evitare il passaggio di altre persone.
+                  <span className="text-xs tracking-widest mb-1 font-bold">ii)</span> Assicurarsi che solo l'atleta sia presente nel video ed evitare il passaggio di altre persone. Evitare di riprendere Unrack e Rerack del bilanciere, in quanto potrebbero essere erroneamente conteggiati come ripetizioni.
                 </li>
                 <li>
                   <span className="text-xs tracking-widest mb-1 font-bold">iii)</span> Non registrare in posti direttamente soleggiati, in controluce e/o con ombre marcate, e davanti a superfici specchianti, per evitare errori di tracciamento.
