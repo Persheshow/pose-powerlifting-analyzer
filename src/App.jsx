@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { usePose } from './hooks/usePose';
 import { useVideoRecorder } from './hooks/useVideoRecorder';
-import { ENGINE } from './config/exercises';
 import logoUnifi from './assets/logo_unifi.png';
 import { SpeedInsights } from '@vercel/speed-insights/react';
 
@@ -68,8 +67,8 @@ export default function App() {
    * Handle the selected video file and set it as the source for analysis.
    * @param {Event} e - Change event from the file input.
    */
-  const handleFileChange = (event) => {
-    const file = event.target.files[0];
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
     if (file) {
       setFileCaricato(file);
       setVideoUrl(URL.createObjectURL(file));
@@ -85,55 +84,47 @@ export default function App() {
     validReps: ripetizioniValide,
     noReps: ripetizioniNonValide,
     reset: resetConteggio,
-  } = usePose(
-    esercizioScelto,
-    allenamentoAvviato,
-    cameraLato,
-    staRegistrando,
-    modalitaAcquisizione === 'file' ? videoUrl : null,
-    targetReps
-  );
+  } = usePose(esercizioScelto, allenamentoAvviato, cameraLato, staRegistrando, modalitaAcquisizione === 'file' ? videoUrl : null);
 
   // Video recording controls using the custom useVideoRecorder hook.
   const {
     startRecording: avviaRegistrazione,
     stopRecording: fermaRegistrazione,
     pendingRecording,
-    confirmDownload,
-    discardRecording,
-    pauseRecording,
-    resumeRecording,
+    confermaDownload,
+    scartaRegistrazione,
+    pausaRegistrazione,
+    riprendiRegistrazione,
   } = useVideoRecorder(canvasRef, setStaRegistrando);
-  const formatoRegistrazione = pendingRecording?.mimeType?.startsWith('video/mp4') ? 'mp4' : 'webm';
 
-  const playRepBeep = () => {
+  const Beep = () => {
     try {
-      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-      if (!AudioContextClass) return;
+      const CtxAudio = window.AudioContext || window.webkitAudioContext;
+      if (!CtxAudio) return;
 
-      const audioContext = new AudioContextClass();
-      const oscillator = audioContext.createOscillator();
-      const gainNode = audioContext.createGain();
+      const ctx = new CtxAudio();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
 
-      oscillator.type = 'sine';
-      oscillator.frequency.setValueAtTime(587.33, audioContext.currentTime);
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(587.33, ctx.currentTime);
 
-      gainNode.gain.setValueAtTime(0.12, audioContext.currentTime);
-      gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.25);
+      gain.gain.setValueAtTime(0.12, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
 
-      oscillator.connect(gainNode);
-      gainNode.connect(audioContext.destination);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
 
-      oscillator.start();
-      oscillator.stop(audioContext.currentTime + 0.25);
-    } catch (error) {
-      console.warn("Esecuzione del flusso audio interrotta", error);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.25);
+    } catch (e) {
+      console.warn("Esecuzione del flusso audio interrotta", e);
     }
   };
 
   // Play a beep sound whenever a valid repetition is detected.
   useEffect(() => {
-    if (ripetizioniValide > 0) playRepBeep();
+    if (ripetizioniValide > 0) Beep();
   }, [ripetizioniValide]);
 
   // Automatically stop recording when the target number of valid repetitions is reached.
@@ -147,7 +138,7 @@ export default function App() {
         }
         setVideoTerminato(true);
         setInPausa(false);
-      }, ENGINE.TARGET_RECORDING_TAIL_MS || 4000);
+      }, 2000); // 2-second delay before stopping recording
 
       return () => clearTimeout(timerId);
     }
@@ -162,11 +153,11 @@ export default function App() {
       }
       try {
         if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        const cameras = devices.filter((device) => device.kind === 'videoinput');
-        setCameraDoppia(cameras.length > 1);
-      } catch (error) {
-        console.error("Errore nell'inizializzazione della fotocamera:", error);
+        const dispositivi = await navigator.mediaDevices.enumerateDevices();
+        const cams = dispositivi.filter(d => d.kind === 'videoinput');
+        setCameraDoppia(cams.length > 1);
+      } catch (err) {
+        console.error("Errore nell'inizializzazione della fotocamera:", err);
       }
     }
     trovaFotocamere();
@@ -187,7 +178,7 @@ export default function App() {
     }
   }, [contoAllaRovescia, avviaRegistrazione]);
 
-  // Render the setup workflow, active analysis view, and recording actions.
+  // main application render
   return (
     <div className="min-h-screen bg-white text-[#002f6c] flex flex-col items-center p-4 font-sans selection:bg-[#002f6c] selection:text-white relative">
 
@@ -423,11 +414,11 @@ export default function App() {
                       onClick={() => {
                         if (inPausa) {
                           if (videoRef.current) videoRef.current.play();
-                          resumeRecording();
+                          riprendiRegistrazione();
                           setInPausa(false);
                         } else {
                           if (videoRef.current) videoRef.current.pause();
-                          pauseRecording();
+                          pausaRegistrazione();
                           setInPausa(true);
                         }
                       }}
@@ -500,13 +491,13 @@ export default function App() {
 
             <div className="flex flex-col gap-0.5 text-center sm:text-left">
               <p className="text-xs uppercase tracking-widest font-bold text-[#002f6c]">
-                {targetReps > 0 && pendingRecording.summary?.valide >= targetReps
-                  ? 'TARGET RAGGIUNTO · REGISTRAZIONE PRONTA'
+                {targetReps > 0 && pendingRecording.riepilogo?.valide >= targetReps
+                  ? '★ TARGET RAGGIUNTO · REGISTRAZIONE PRONTA'
                   : 'Registrazione pronta'}
               </p>
-              {pendingRecording.summary && (
+              {pendingRecording.riepilogo && (
                 <p className="text-[10px] uppercase tracking-wider text-gray-600">
-                  {pendingRecording.summary.valide} valide &middot; {pendingRecording.summary.nonValide} non valide
+                  {pendingRecording.riepilogo.valide} valide &middot; {pendingRecording.riepilogo.nonValide} non valide
                 </p>
               )}
             </div>
@@ -514,7 +505,7 @@ export default function App() {
             <div className="flex items-center gap-2 shrink-0">
               <button
                 onClick={() => {
-                  discardRecording();
+                  scartaRegistrazione();
                   resetConteggio();
                 }}
                 className="px-3 py-2 text-xs uppercase tracking-widest border border-[#002f6c] text-[#002f6c] rounded-none transition-none hover:bg-[#002f6c] hover:text-white cursor-pointer"
@@ -524,12 +515,23 @@ export default function App() {
 
               <button
                 onClick={() => {
-                  confirmDownload(formatoRegistrazione);
+                  confermaDownload('mp4');
                   resetConteggio();
                 }}
                 className="px-3 py-2 text-xs uppercase tracking-widest border border-[#002f6c] bg-gray-100 text-[#002f6c] rounded-none transition-none hover:bg-[#002f6c] hover:text-white cursor-pointer"
               >
-                Scarica video (.{formatoRegistrazione.toUpperCase()})
+                Scarica .MP4
+              </button>
+
+              <button
+                onClick={() => {
+                  confermaDownload('webm');
+                  resetConteggio();
+                }}
+                className="px-3 py-2 text-xs uppercase tracking-widest border border-[#002f6c] bg-gray-100 text-[#002f6c] rounded-none transition-none hover:bg-[#002f6c] hover:text-white cursor-pointer"
+                title="Formato WebM nativo"
+              >
+                .WEBM
               </button>
             </div>
 

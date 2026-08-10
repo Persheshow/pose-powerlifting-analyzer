@@ -1,9 +1,9 @@
 import { useRef, useCallback, useState } from 'react';
 import { ENGINE } from '../config/exercises';
 
-const PREFERRED_MIME_TYPES = [
-    'video/mp4',
+const TIPI_PREFERITI = [
     'video/webm;codecs=vp8',
+    'video/mp4',
     'video/webm;codecs=vp9',
     'video/webm',
 ];
@@ -12,25 +12,21 @@ const PREFERRED_MIME_TYPES = [
  * Determine the best supported video type for MediaRecorder.
  * @returns {string|null} - The supported type or null if none are supported.
  */
-function getSupportedMimeType() {
+function scegliTipoSupportato() {
     if (typeof MediaRecorder === 'undefined' || typeof MediaRecorder.isTypeSupported !== 'function') {
         return null;
     }
-    return PREFERRED_MIME_TYPES.find((mimeType) => MediaRecorder.isTypeSupported(mimeType)) || null;
+    return TIPI_PREFERITI.find((tipo) => MediaRecorder.isTypeSupported(tipo)) || null;
 }
 
 /**
  * Infer the file extension from a recorded video type.
- * @param {string|null} mimeType - Type reported by MediaRecorder.
+ * @param {string|null} tipo - type reported by MediaRecorder.
  * @returns {string} - File extension to use for the downloaded file.
  */
-function extractVideoFormat(mimeType) {
-    if (mimeType && mimeType.startsWith('video/mp4')) return 'mp4';
+function extractVideoFormat(tipo) {
+    if (tipo && tipo.startsWith('video/mp4')) return 'mp4';
     return 'webm';
-}
-
-function extractCleanMimeType(mimeType) {
-    return mimeType?.split(';')[0] || 'video/webm';
 }
 
 /**
@@ -40,12 +36,11 @@ function extractCleanMimeType(mimeType) {
  * @returns {Object} - Recording control callbacks and pending recording data.
  */
 export function useVideoRecorder(canvasRef, setIsRecording) {
-    const recorderRef = useRef(null);
-    const videoChunksRef = useRef([]);
-    const shouldSaveRef = useRef(true);
-    const selectedMimeTypeRef = useRef(null);
-    const streamRef = useRef(null);
-    const summaryRef = useRef(null);
+    const registratoreRef = useRef(null);
+    const pezziVideoRef = useRef([]);
+    const vuoleSalvareRef = useRef(true);
+    const tipoSceltoRef = useRef(null);
+    const riepilogoRef = useRef(null);
 
     const [pendingRecording, setPendingRecording] = useState(null);
     const pendingRecordingRef = useRef(null);
@@ -56,60 +51,53 @@ export function useVideoRecorder(canvasRef, setIsRecording) {
     const startRecording = useCallback(() => {
         if (!canvasRef.current) return;
 
-        const recordingFps = ENGINE.RECORDING_FPS || 30;
-        const stream = canvasRef.current.captureStream(recordingFps);
-        streamRef.current = stream;
-        const supportedMimeType = getSupportedMimeType();
-        selectedMimeTypeRef.current = supportedMimeType;
+        const flusso = canvasRef.current.captureStream();
+        const tipoSupportato = scegliTipoSupportato();
+        tipoSceltoRef.current = tipoSupportato;
 
         try {
-            recorderRef.current = supportedMimeType
-                ? new MediaRecorder(stream, { mimeType: supportedMimeType, videoBitsPerSecond: ENGINE.RECORDING_BITRATE })
-                : new MediaRecorder(stream, { videoBitsPerSecond: ENGINE.RECORDING_BITRATE });
+            registratoreRef.current = tipoSupportato
+                ? new MediaRecorder(flusso, { mimeType: tipoSupportato, videoBitsPerSecond: ENGINE.RECORDING_BITRATE })
+                : new MediaRecorder(flusso, { videoBitsPerSecond: ENGINE.RECORDING_BITRATE });
         } catch {
-            recorderRef.current = new MediaRecorder(stream);
-            selectedMimeTypeRef.current = null;
+            registratoreRef.current = new MediaRecorder(flusso);
+            tipoSceltoRef.current = null;
         }
 
-        recorderRef.current.ondataavailable = (event) => {
-            if (event.data && event.data.size > 0) {
-                videoChunksRef.current.push(event.data);
+        registratoreRef.current.ondataavailable = (e) => {
+            if (e.data && e.data.size > 0) {
+                pezziVideoRef.current.push(e.data);
             }
         };
 
-        recorderRef.current.onstop = () => {
-            if (shouldSaveRef.current && videoChunksRef.current.length > 0) {
-                const effectiveMimeType = selectedMimeTypeRef.current || recorderRef.current?.mimeType || 'video/webm';
-                const cleanMimeType = extractCleanMimeType(effectiveMimeType);
-                const videoBlob = new Blob(videoChunksRef.current, { type: cleanMimeType });
-                const extension = extractVideoFormat(effectiveMimeType);
-                const filename = `analisi_cinematica_${new Date().toISOString().slice(0, 10)}.${extension}`;
-                const recording = { blob: videoBlob, filename, mimeType: cleanMimeType, summary: summaryRef.current };
-                pendingRecordingRef.current = recording;
-                setPendingRecording(recording);
+        registratoreRef.current.onstop = () => {
+            if (vuoleSalvareRef.current && pezziVideoRef.current.length > 0) {
+                const tipoEffettivo = tipoSceltoRef.current || registratoreRef.current?.mimeType || 'video/webm';
+                const tipoPulito = tipoEffettivo.split(';')[0];
+                const fileVideo = new Blob(pezziVideoRef.current, { type: tipoPulito });
+                const estensione = extractVideoFormat(tipoEffettivo);
+                const nomeFile = `analisi_cinematica_${new Date().toISOString().slice(0, 10)}.${estensione}`;
+                const registrazione = { blob: fileVideo, filename: nomeFile, riepilogo: riepilogoRef.current };
+                pendingRecordingRef.current = registrazione;
+                setPendingRecording(registrazione);
             }
 
-            videoChunksRef.current = [];
-            streamRef.current?.getTracks().forEach((track) => track.stop());
-            streamRef.current = null;
+            pezziVideoRef.current = [];
         };
-        recorderRef.current.start(ENGINE.RECORDING_TIMESLICE_MS || 1000);
+        registratoreRef.current.start();
         setIsRecording(true);
     }, [canvasRef, setIsRecording]);
 
     /**
      * Stop the active recording and optionally keep the resulting video.
-     * @param {boolean} shouldSave - Whether to save the recorded file.
-     * @param {Object|null} summary - Optional summary metadata for the recording.
+     * @param {boolean} salvaVideo - Whether to save the recorded file.
+     * @param {Object|null} riepilogo - Optional summary metadata for the recording.
      */
-    const stopRecording = useCallback((shouldSave = true, summary = null) => {
-        if (recorderRef.current && (recorderRef.current.state === "recording" || recorderRef.current.state === "paused")) {
-            shouldSaveRef.current = shouldSave;
-            summaryRef.current = summary;
-            if (recorderRef.current.state === "recording") {
-                recorderRef.current.requestData();
-            }
-            recorderRef.current.stop();
+    const stopRecording = useCallback((salvaVideo = true, riepilogo = null) => {
+        if (registratoreRef.current && (registratoreRef.current.state === "recording" || registratoreRef.current.state === "paused")) {
+            vuoleSalvareRef.current = salvaVideo;
+            riepilogoRef.current = riepilogo;
+            registratoreRef.current.stop();
             setIsRecording(false);
         }
     }, [setIsRecording]);
@@ -117,46 +105,45 @@ export function useVideoRecorder(canvasRef, setIsRecording) {
     /**
      * Pause an in-progress recording.
      */
-    const pauseRecording = useCallback(() => {
-        if (recorderRef.current && recorderRef.current.state === "recording") {
-            recorderRef.current.pause();
+    const pausaRegistrazione = useCallback(() => {
+        if (registratoreRef.current && registratoreRef.current.state === "recording") {
+            registratoreRef.current.pause();
         }
     }, []);
 
     /**
      * Resume a paused recording session.
      */
-    const resumeRecording = useCallback(() => {
-        if (recorderRef.current && recorderRef.current.state === "paused") {
-            recorderRef.current.resume();
+    const riprendiRegistrazione = useCallback(() => {
+        if (registratoreRef.current && registratoreRef.current.state === "paused") {
+            registratoreRef.current.resume();
         }
     }, []);
 
     /**
      * Finalize and download the pending recording in the chosen format.
-     * @param {'mp4'|'webm'} selectedFormat - Desired format for the video download.
+     * @param {'mp4'|'webm'} formatoScelto - Desired format for the video download.
      */
-    const confirmDownload = useCallback((selectedFormat) => {
-        const recording = pendingRecordingRef.current;
-        if (!recording) return;
+    const confermaDownload = useCallback((formatoScelto) => {
+        const corrente = pendingRecordingRef.current;
+        if (!corrente) return;
 
-        const effectiveFormat = extractVideoFormat(recording.mimeType);
-        const extension = selectedFormat === effectiveFormat ? selectedFormat : effectiveFormat;
-        const mimeType = recording.mimeType || (extension === 'mp4' ? 'video/mp4' : 'video/webm');
-        const downloadableBlob = new Blob([recording.blob], { type: mimeType });
-        const filename = `analisi_cinematica_${new Date().toISOString().slice(0, 10)}.${extension}`;
-        const downloadUrl = URL.createObjectURL(downloadableBlob);
-        const anchor = document.createElement('a');
-        anchor.style.display = 'none';
-        anchor.href = downloadUrl;
-        anchor.download = filename;
+        const estensione = formatoScelto === 'mp4' ? 'mp4' : 'webm';
+        const mimeType = formatoScelto === 'mp4' ? 'video/mp4' : 'video/webm';
+        const blobCondivisibile = new Blob([corrente.blob], { type: mimeType });
+        const nomeFile = `analisi_cinematica_${new Date().toISOString().slice(0, 10)}.${estensione}`;
+        const linkTemp = URL.createObjectURL(blobCondivisibile);
+        const tagA = document.createElement('a');
+        tagA.style.display = 'none';
+        tagA.href = linkTemp;
+        tagA.download = nomeFile;
 
-        document.body.appendChild(anchor);
-        anchor.click();
+        document.body.appendChild(tagA);
+        tagA.click();
 
         setTimeout(() => {
-            document.body.removeChild(anchor);
-            URL.revokeObjectURL(downloadUrl);
+            document.body.removeChild(tagA);
+            URL.revokeObjectURL(linkTemp);
         }, 100);
 
         pendingRecordingRef.current = null;
@@ -166,7 +153,7 @@ export function useVideoRecorder(canvasRef, setIsRecording) {
     /**
      * Discard the pending recording without downloading it.
      */
-    const discardRecording = useCallback(() => {
+    const scartaRegistrazione = useCallback(() => {
         pendingRecordingRef.current = null;
         setPendingRecording(null);
     }, []);
@@ -175,9 +162,9 @@ export function useVideoRecorder(canvasRef, setIsRecording) {
         startRecording,
         stopRecording,
         pendingRecording,
-        confirmDownload,
-        discardRecording,
-        pauseRecording,
-        resumeRecording
+        confermaDownload,
+        scartaRegistrazione,
+        pausaRegistrazione,
+        riprendiRegistrazione
     };
 }
