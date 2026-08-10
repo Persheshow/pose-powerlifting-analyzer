@@ -187,6 +187,7 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
       if (framePersiRef.current === trackingLostThreshold + 1) {
         ultimoPuntiRef.current = null;
         smoothedLandmarksRef.current = null;
+        soggettoTracciatoRef.current = null;
         angoliPrecRef.current = { primary: null, secondary: null };
         setAngles({ primary: null, secondary: null });
         setIsTrackingLost(true);

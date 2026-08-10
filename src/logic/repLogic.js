@@ -84,23 +84,21 @@ function getShoulderLandmark(lm, idxPrincipale, anca) {
 
 
 /**
- * Helper function to get the elbow landmark, handling occlusion and mirroring.
- * @param {Array} lm - The array of landmarks.
- * @param {number} idxPrincipale - The index of the main elbow landmark.
- * @param {Object} spalla - The shoulder landmark.
- * @param {Object} polso - The wrist landmark.
- * @returns {Object} - The elbow landmark or a default value.
+ * Checks whether the three landmarks of the selected arm are reliable enough
+ * for overhead press analysis.
+ * @param {Array} landmarks - The array of MediaPipe landmarks.
+ * @param {'LEFT'|'RIGHT'} side - Side locked by the camera tracker.
+ * @returns {boolean} - True when shoulder, elbow, and wrist are usable.
  */
-function getElbowLandmark(lm, idxPrincipale, spalla, polso) {
-  const idxOpposto = idxPrincipale === 13 ? 14 : 13;
-  const principale = lm[idxPrincipale];
-  const opposto = lm[idxOpposto];
-  if (principale && principale.visibility > ENGINE.VISIBILITY_THRESHOLD) return principale;
-  if (opposto && opposto.visibility > ENGINE.VISIBILITY_THRESHOLD) return { ...opposto, x: 1 - opposto.x };
-  if (spalla && polso) {
-    return { x: (spalla.x + polso.x) / 2, y: (spalla.y + polso.y) / 2, visibility: ENGINE.VISIBILITY_THRESHOLD };
-  }
-  return principale;
+function isSelectedArmVisible(landmarks, side) {
+  const { shoulder, elbow, wrist } = ESERCIZI.OVERHEAD_PRESS.landmarks[side];
+  return [shoulder, elbow, wrist].every((index) => {
+    const point = landmarks[index];
+    return point &&
+      point.visibility > ENGINE.VISIBILITY_THRESHOLD &&
+      point.x >= 0 && point.x <= 1 &&
+      point.y >= 0 && point.y <= 1;
+  });
 }
 
 /**
@@ -343,31 +341,46 @@ export function processDeadlift(stato, landmarks, lato) {
  */
 export function processOverheadPress(stato, landmarks, lato) {
   const cfg = ESERCIZI.OVERHEAD_PRESS.thresholds;
-  const { shoulder: idxSpalla, elbow: idxGomito, wrist, hip } = ESERCIZI.OVERHEAD_PRESS.landmarks[lato];
   const lm = landmarks;
   const adesso = Date.now();
-  const guardia = verificaVisibilitaEOcclusione(stato, lm, [idxSpalla]);
+  const m = stato.metrics;
+
+  if (!isSelectedArmVisible(lm, lato)) {
+    const { shouldReset } = handleOcclusion(stato);
+    const statoRisultante = shouldReset ? createInitialState() : stato;
+    return {
+      state: statoRisultante,
+      event: null,
+      primaryAngle: null,
+      secondaryAngle: null,
+      isTarget: false,
+    };
+  }
+
+  const { shoulder: idxSpalla, elbow: idxGomito, wrist, hip } = ESERCIZI.OVERHEAD_PRESS.landmarks[lato];
+  const guardia = verificaVisibilitaEOcclusione(stato, lm, [idxSpalla, idxGomito, wrist]);
   if (!guardia.ok) return guardia.result;
 
-  const gomitoLm = getElbowLandmark(lm, idxGomito, lm[idxSpalla], lm[wrist]);
-  const gomitoGrezzo = calculateAngle(lm[idxSpalla], gomitoLm, lm[wrist]);
+  const gomitoGrezzo = calculateAngle(lm[idxSpalla], lm[idxGomito], lm[wrist]);
   stato.smoothedPrimary = smoothAngle(stato.smoothedPrimary, gomitoGrezzo);
   const angoloGomito = stato.smoothedPrimary;
-  const verticale = { x: lm[idxSpalla].x, y: lm[idxSpalla].y - 0.1 };
-  const troncoGrezzo = calculateAngle(verticale, lm[idxSpalla], lm[hip]);
-  stato.smoothedSecondary = smoothAngle(stato.smoothedSecondary, troncoGrezzo);
+  const anca = lm[hip];
+  if (anca?.visibility > ENGINE.VISIBILITY_THRESHOLD) {
+    const verticale = { x: lm[idxSpalla].x, y: lm[idxSpalla].y - 0.1 };
+    const troncoGrezzo = calculateAngle(verticale, lm[idxSpalla], anca);
+    stato.smoothedSecondary = smoothAngle(stato.smoothedSecondary, troncoGrezzo);
+  }
   const angoloTronco = stato.smoothedSecondary;
-  const m = stato.metrics;
   let evento = null;
 
   if (adesso - stato.startTime < ENGINE.SETUP_GRACE_MS) {
     stato.lastAngle = angoloGomito;
-    return { state: stato, event: null, primaryAngle: angoloGomito, secondaryAngle: angoloTronco, isTarget: m.targetReached || angoloGomito > cfg.topElbow };
+    return { state: stato, event: null, primaryAngle: angoloGomito, secondaryAngle: angoloTronco, isTarget: angoloGomito > cfg.topElbow };
   }
 
   if (adesso < m.cooldownUntil) {
     stato.lastAngle = angoloGomito;
-    return { state: stato, event: null, primaryAngle: angoloGomito, secondaryAngle: angoloTronco, isTarget: m.targetReached || angoloGomito > cfg.topElbow };
+    return { state: stato, event: null, primaryAngle: angoloGomito, secondaryAngle: angoloTronco, isTarget: angoloGomito > cfg.topElbow };
   }
 
   m.lowestElbowAngle = Math.min(m.lowestElbowAngle ?? 180, angoloGomito);
@@ -408,7 +421,7 @@ export function processOverheadPress(stato, landmarks, lato) {
   }
 
   stato.lastAngle = angoloGomito;
-  return { state: stato, event: evento, primaryAngle: angoloGomito, secondaryAngle: angoloTronco, isTarget: m.targetReached || angoloGomito > cfg.topElbow };
+  return { state: stato, event: evento, primaryAngle: angoloGomito, secondaryAngle: angoloTronco, isTarget: angoloGomito > cfg.topElbow };
 }
 
 /**

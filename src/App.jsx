@@ -139,7 +139,7 @@ export default function App() {
         }
         setVideoTerminato(true);
         setInPausa(false);
-      }, 2000); // 2-second delay before stopping recording
+      }, 3000); // 3-second delay before stopping recording
 
       return () => clearTimeout(timerId);
     }
@@ -493,7 +493,7 @@ export default function App() {
             <div className="flex flex-col gap-0.5 text-center sm:text-left">
               <p className="text-xs uppercase tracking-widest font-bold text-[#002f6c]">
                 {targetReps > 0 && pendingRecording.riepilogo?.valide >= targetReps
-                  ? '★ TARGET RAGGIUNTO · REGISTRAZIONE PRONTA'
+                  ? 'TARGET RAGGIUNTO · REGISTRAZIONE PRONTA'
                   : 'Registrazione pronta'}
               </p>
               {pendingRecording.riepilogo && (
