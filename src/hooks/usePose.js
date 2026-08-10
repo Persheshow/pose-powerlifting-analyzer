@@ -20,7 +20,6 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
   const modelloRef = useRef(null);
   const frameIdRef = useRef(null);
   const statoRepRef = useRef(createInitialState());
-  const primoCaricamentoRef = useRef(true);
   const angoliPrecRef = useRef({ primary: null, secondary: null });
   const framePersiRef = useRef(0);
   const ultimoTempoVideoRef = useRef(-1);
@@ -99,7 +98,6 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
         if (componenteMontato) {
           modelloRef.current = landmarker;
           setIsLoading(false);
-          primoCaricamentoRef.current = false;
         } else {
           landmarker.close();
         }
@@ -206,7 +204,7 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
           ultimoTempoVideoRef.current = video.currentTime;
 
           try {
-            // Usa performance.now() per garantire sempre l'aumento temporale a MediaPipe (dal commit locale)
+            // MediaPipe VIDEO mode requires monotonically increasing timestamps.
             const now = performance.now();
             const risultati = landmarker.detectForVideo(video, now);
 
@@ -216,7 +214,7 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
 
               const puntiGrezzi = risultati.landmarks[0];
 
-              // EMA stabilization
+              // Stabilize landmark coordinates with an exponential moving average.
               const puntiStabilizzati = smoothLandmarksCoordinates(
                 puntiGrezzi,
                 smoothedLandmarksRef.current,
@@ -228,9 +226,8 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
               const latoRilevato = determinaLatoInquadrato(puntiStabilizzati);
               ultimoLatoRef.current = latoRilevato;
 
-              // Ensure all critical landmarks are visible and within the frame before processing the repetition logic
+              // Validate every landmark required by the selected exercise.
               const indiciNodiCritici = Object.values(ESERCIZI[esercizio].landmarks[latoRilevato]);
-              const puntiCritici = indiciNodiCritici.map(indice => puntiStabilizzati[indice]);
               const isInquadraturaValida = indiciNodiCritici.every(indice => {
                 const p = puntiStabilizzati[indice];
                 return p &&
@@ -247,10 +244,10 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
                   expires: performance.now() + 500
                 };
               } else {
-                // Process the repetition logic only if all critical landmarks are visible and within the frame
+                // Process repetitions only when all critical landmarks are usable.
                 const esito = processFrame(esercizio, statoRepRef.current, puntiStabilizzati, latoRilevato);
 
-                // 1. Aggiorna sempre gli angoli a schermo (permette all'utente di centrarsi) (dal commit locale)
+                // Keep the displayed angles responsive while the user adjusts position.
                 if (timestamp - ultimoAggiornamentoUI.current > 100) {
                   if (Math.abs((esito.primaryAngle ?? 0) - (angoliPrecRef.current.primary ?? 0)) > 1) {
                     setAngles({ primary: esito.primaryAngle, secondary: esito.secondaryAngle });
@@ -259,7 +256,7 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
                   }
                 }
 
-                // 2. Avanza di stato e salva le ripetizioni SOLO se stiamo registrando (dal commit locale)
+                // Advance the repetition state only while an analysis is active.
                 if (registrazioneRef.current) {
                   statoRepRef.current = esito.state;
                   ultimoBersaglioRef.current = esito.isTarget;
@@ -279,7 +276,7 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
                     }
                   }
                 }
-              } // end of visibility check
+              }
             } else {
               framePersiRef.current++;
               if (framePersiRef.current > (ENGINE?.TRACKING_LOST_FRAMES || 15)) {
@@ -295,7 +292,7 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
 
         const erroreLampeggiante = messaggioHudRef.current && performance.now() < messaggioHudRef.current.expires && messaggioHudRef.current.type === 'INVALID';
 
-        // Disegna lo scheletro continuamente
+        // Keep drawing the latest available skeleton between inference frames.
         if (ultimoPuntiRef.current) {
           ctx.save();
           if (specchiato) {
@@ -321,7 +318,7 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
 
     frameIdRef.current = requestAnimationFrame(ciclo);
     return () => { if (frameIdRef.current) cancelAnimationFrame(frameIdRef.current); };
-  }, [esercizio, attivo, latoCamera, videoUrl]);
+  }, [esercizio, attivo, latoCamera, videoUrl, isTrackingLost]);
 
   /**
    * Reset the current pose tracking logical state (without clearing visual skeleton).
@@ -336,7 +333,7 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
     setValidReps(0);
     setNoReps(0);
     setFaults([]);
-    // Non cancelliamo l'ultimoPuntiRef qui, per mantenere l'estetica visiva intatta durante lo scatto del REC
+    // Preserve the latest landmarks so the skeleton remains visible when recording starts.
   }
 
   return { videoRef, canvasRef, isLoading, isTrackingLost, error, validReps, noReps, faults, angles, reset };

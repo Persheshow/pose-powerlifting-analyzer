@@ -43,6 +43,31 @@ const isMobileDevice = () => {
   return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 };
 
+function playRepBeep() {
+  try {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) return;
+
+    const audioContext = new AudioContextClass();
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+
+    oscillator.type = 'sine';
+    oscillator.frequency.setValueAtTime(587.33, audioContext.currentTime);
+
+    gainNode.gain.setValueAtTime(0.12, audioContext.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.25);
+
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+
+    oscillator.start();
+    oscillator.stop(audioContext.currentTime + 0.25);
+  } catch (error) {
+    console.warn('Audio playback was interrupted', error);
+  }
+}
+
 /**
  * Main application component that renders UI, handles exercise selection, and integrates
  * pose tracking with recording controls.
@@ -96,35 +121,11 @@ export default function App() {
     pausaRegistrazione,
     riprendiRegistrazione,
   } = useVideoRecorder(canvasRef, setStaRegistrando);
-
-  const Beep = () => {
-    try {
-      const CtxAudio = window.AudioContext || window.webkitAudioContext;
-      if (!CtxAudio) return;
-
-      const ctx = new CtxAudio();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(587.33, ctx.currentTime);
-
-      gain.gain.setValueAtTime(0.12, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
-
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-
-      osc.start();
-      osc.stop(ctx.currentTime + 0.25);
-    } catch (e) {
-      console.warn("Esecuzione del flusso audio interrotta", e);
-    }
-  };
+  const formatoRegistrazione = pendingRecording?.mimeType?.startsWith('video/mp4') ? 'mp4' : 'webm';
 
   // Play a beep sound whenever a valid repetition is detected.
   useEffect(() => {
-    if (ripetizioniValide > 0) Beep();
+    if (ripetizioniValide > 0) playRepBeep();
   }, [ripetizioniValide]);
 
   // Automatically stop recording when the target number of valid repetitions is reached.
@@ -178,7 +179,7 @@ export default function App() {
     }
   }, [contoAllaRovescia, avviaRegistrazione]);
 
-  // main application render
+  // Render the setup workflow, active analysis view, and recording actions.
   return (
     <div className="min-h-screen bg-white text-[#002f6c] flex flex-col items-center p-4 font-sans selection:bg-[#002f6c] selection:text-white relative">
 
@@ -515,23 +516,12 @@ export default function App() {
 
               <button
                 onClick={() => {
-                  confermaDownload('mp4');
+                  confermaDownload();
                   resetConteggio();
                 }}
                 className="px-3 py-2 text-xs uppercase tracking-widest border border-[#002f6c] bg-gray-100 text-[#002f6c] rounded-none transition-none hover:bg-[#002f6c] hover:text-white cursor-pointer"
               >
-                Scarica .MP4
-              </button>
-
-              <button
-                onClick={() => {
-                  confermaDownload('webm');
-                  resetConteggio();
-                }}
-                className="px-3 py-2 text-xs uppercase tracking-widest border border-[#002f6c] bg-gray-100 text-[#002f6c] rounded-none transition-none hover:bg-[#002f6c] hover:text-white cursor-pointer"
-                title="Formato WebM nativo"
-              >
-                .WEBM
+                Scarica video (.{formatoRegistrazione.toUpperCase()})
               </button>
             </div>
 

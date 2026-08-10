@@ -43,7 +43,6 @@ export const SKELETON_COLORS = {
   target: '#ffffff',
   active: '#ffffff',
   warning: '#6c0000',
-  error: '#ffffff',
 };
 
 export const SMOOTHING = {
@@ -78,10 +77,6 @@ export const ENGINE = {
   // Number of consecutive frames without valid landmarks after which the UI
   // reports "body not detected".
   TRACKING_LOST_FRAMES: 30,
-  // Time window within which consecutive too-fast repetitions are counted.
-  FAST_REP_WINDOW_MS: 5000,
-  // Number of too-fast repetitions within the window that triggers the warning.
-  FAST_REP_TRIGGER_COUNT: 3,
   // Duration of display for the HUD banner "VALID REP" / "NO REP".
   HUD_VALID_MS: 2000,
   HUD_INVALID_MS: 2000,
@@ -93,5 +88,4 @@ export const ENGINE = {
   RECORDING_BITRATE: 8_000_000, // 8 Mbps
   // Inference interval for pose detection (1000 ms / 33 ms = 30.3 FPS).
   INTERVALLO_INFERENZA_MS: 33,
-  
 };

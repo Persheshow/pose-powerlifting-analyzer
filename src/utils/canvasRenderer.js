@@ -39,8 +39,11 @@ export function drawSkeleton(ctx, landmarks, w, h, isTargetReached, side, ex, ha
     [...collegamentiBase, ...collegamentiBraccio].forEach(([inizio, fine]) => {
         if (inizio === undefined || fine === undefined) return;
         const p1 = landmarks[inizio], p2 = landmarks[fine];
-        if (p1 && p2 && p1.visibility > 0.2 && p2.visibility > 0.2) {
-            ctx.beginPath(); ctx.moveTo(p1.x * w, p1.y * h); ctx.lineTo(p2.x * w, p2.y * h); ctx.stroke();
+        if (p1 && p2 && p1.visibility > ENGINE.DRAW_VISIBILITY_THRESHOLD && p2.visibility > ENGINE.DRAW_VISIBILITY_THRESHOLD) {
+            ctx.beginPath();
+            ctx.moveTo(p1.x * w, p1.y * h);
+            ctx.lineTo(p2.x * w, p2.y * h);
+            ctx.stroke();
         }
     });
 
@@ -51,9 +54,9 @@ export function drawSkeleton(ctx, landmarks, w, h, isTargetReached, side, ex, ha
 
     const puntoEvidenziato = landmarks[indicePuntoSnodo];
 
-    if (puntoEvidenziato && puntoEvidenziato.visibility > 0.2) {
+    if (puntoEvidenziato && puntoEvidenziato.visibility > ENGINE.DRAW_VISIBILITY_THRESHOLD) {
         ctx.beginPath();
-        // Il pallino cambia colore in base alla validazione della FSM
+        // The highlighted joint reflects the current FSM target state.
         ctx.fillStyle = isTargetReached ? '#00ff88' : '#ef4444';
         ctx.arc(puntoEvidenziato.x * w, puntoEvidenziato.y * h, 6, 0, 2 * Math.PI);
         ctx.fill();
