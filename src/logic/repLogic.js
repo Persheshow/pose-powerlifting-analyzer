@@ -6,47 +6,56 @@ function getValidationVisibility(landmark) {
   return landmark?.validationVisibility ?? landmark?.visibility ?? 0;
 }
 
+function hasCountingVisibility(landmarks, indices) {
+  const threshold = ENGINE.COUNT_VISIBILITY_THRESHOLD ?? ENGINE.VISIBILITY_THRESHOLD;
+  return indices.every((index) => {
+    const landmark = landmarks[index];
+    return landmark && !landmark.frozen && (landmark.visibility ?? 0) >= threshold;
+  });
+}
+
 /**
- * Smooth the current angle and reject physically impossible variations (jitter).
- * @param {number|null} prev - The previous smoothed angle.
- * @param {number} current - The current raw angle measurement.
+ * Smooth the current angle and rate-limit physically unlikely jumps.
+ * @param {number|null} previousAngle - The previous smoothed angle.
+ * @param {number} currentAngle - The current raw angle measurement.
  * @returns {number} - The updated smoothed angle.
  */
-export function smoothAngle(prev, current) {
-  if (prev === null) return current;
+export function smoothAngle(previousAngle, currentAngle) {
+  if (previousAngle === null) return currentAngle;
 
-  const variazione = Math.abs(current - prev);
+  const maxStep = ENGINE.MAX_ANGLE_STEP_DEG ?? 30;
+  const angleDelta = Math.abs(currentAngle - previousAngle);
 
-  // Reject variations greater than 25 degrees between frames, as such an angular speed is physically impossible under load.
-  // This prevents jitter from causing false state transitions in the FSM.
-  if (variazione > 25) {
-    return prev; 
+  // Large jumps can happen after temporary landmark occlusion. Clamping lets
+  // the signal recover gradually instead of freezing forever at the old angle.
+  if (angleDelta > maxStep) {
+    return previousAngle + Math.sign(currentAngle - previousAngle) * maxStep;
   }
 
-  return (current * SMOOTHING.alpha) + (prev * SMOOTHING.beta);
+  return (currentAngle * SMOOTHING.alpha) + (previousAngle * SMOOTHING.beta);
 }
 
 /**
  * Calculate the angle in degrees formed by the vectors BA and BC.
- * @param {Object} a - First point of the angle.
- * @param {Object} b - Vertex point of the angle.
- * @param {Object} c - Third point of the angle.
+ * @param {Object} pointA - First point of the angle.
+ * @param {Object} vertex - Vertex point of the angle.
+ * @param {Object} pointC - Third point of the angle.
  * @returns {number} - Angle between vectors BA and BC in degrees.
  */
-export function calculateAngle(a, b, c) {
-  const vettoreBA = { x: a.x - b.x, y: a.y - b.y };
-  const vettoreBC = { x: c.x - b.x, y: c.y - b.y };
+export function calculateAngle(pointA, vertex, pointC) {
+  const vectorBA = { x: pointA.x - vertex.x, y: pointA.y - vertex.y };
+  const vectorBC = { x: pointC.x - vertex.x, y: pointC.y - vertex.y };
 
-  const prodottoScalare = (vettoreBA.x * vettoreBC.x) + (vettoreBA.y * vettoreBC.y);
-  const lunghezzaBA = Math.sqrt(vettoreBA.x * vettoreBA.x + vettoreBA.y * vettoreBA.y);
-  const lunghezzaBC = Math.sqrt(vettoreBC.x * vettoreBC.x + vettoreBC.y * vettoreBC.y);
+  const dotProduct = (vectorBA.x * vectorBC.x) + (vectorBA.y * vectorBC.y);
+  const lengthBA = Math.sqrt(vectorBA.x * vectorBA.x + vectorBA.y * vectorBA.y);
+  const lengthBC = Math.sqrt(vectorBC.x * vectorBC.x + vectorBC.y * vectorBC.y);
 
-  if (lunghezzaBA === 0 || lunghezzaBC === 0) return 0;
+  if (lengthBA === 0 || lengthBC === 0) return 0;
 
-  let cosAngolo = prodottoScalare / (lunghezzaBA * lunghezzaBC);
-  cosAngolo = Math.max(-1.0, Math.min(1.0, cosAngolo));
+  let angleCosine = dotProduct / (lengthBA * lengthBC);
+  angleCosine = Math.max(-1.0, Math.min(1.0, angleCosine));
 
-  return (Math.acos(cosAngolo) * 180.0) / Math.PI;
+  return (Math.acos(angleCosine) * 180.0) / Math.PI;
 }
 
 /**
@@ -64,111 +73,133 @@ export function createInitialState() {
     startTime: Date.now(),
     occludedSince: null,
     metrics: {
-      faults: new Set(),
-      startX: null,
-      maxAscentAngle: 0,
-      lockedAtStart: false,
       deepEnough: false,
-      minWristY: 1.0,
-      startKneeAngle: null,
       cooldownUntil: 0,
       repStartTime: 0,
       lowestKneeAngle: 180,
       lowestElbowAngle: 180,
-      lowestHipAngle: 180,
       targetReached: false,
+      bottomFrames: 0,
+      lockoutFrames: 0,
+      bottomWristY: null,
+      lockoutWristY: null,
+      squatArmed: false,
+      squatReadyFrames: 0,
+      squatReadyHip: null,
+      squatReadyAngleMin: null,
+      squatReadyAngleMax: null,
+      squatTopFrames: 0,
+      squatAttemptStartHip: null,
+      squatAttemptTranslation: 0,
+      squatLowestHipY: null,
+      squatLegLength: null,
     },
   };
 }
 
 /**
  * Helper function to get the shoulder landmark, handling occlusion and mirroring.
- * @param {Array} lm - The array of landmarks.
- * @param {number} idxPrincipale - The index of the main shoulder landmark.
- * @param {Object} anca - The hip landmark.
+ * @param {Array} landmarks - The array of landmarks.
+ * @param {number} primaryIndex - The index of the main shoulder landmark.
+ * @param {Object} hipLandmark - The hip landmark.
  * @returns {Object} - The shoulder landmark or a default value.
  */
-function getShoulderLandmark(lm, idxPrincipale, anca) {
-  const idxOpposto = idxPrincipale === 11 ? 12 : 11;
-  const principale = lm[idxPrincipale];
-  const opposto = lm[idxOpposto];
-  if (principale && getValidationVisibility(principale) >= VISIBILITY_EXIT_THRESHOLD) return principale;
-  if (opposto && getValidationVisibility(opposto) >= VISIBILITY_EXIT_THRESHOLD) return { ...opposto, x: 1 - opposto.x };
-  return { x: anca.x, y: anca.y - 0.25, visibility: ENGINE.VISIBILITY_THRESHOLD };
+function getShoulderLandmark(landmarks, primaryIndex, hipLandmark) {
+  const oppositeIndex = primaryIndex === 11 ? 12 : 11;
+  const primaryLandmark = landmarks[primaryIndex];
+  const oppositeLandmark = landmarks[oppositeIndex];
+  if (primaryLandmark && getValidationVisibility(primaryLandmark) >= VISIBILITY_EXIT_THRESHOLD) return primaryLandmark;
+  if (oppositeLandmark && getValidationVisibility(oppositeLandmark) >= VISIBILITY_EXIT_THRESHOLD) {
+    return { ...oppositeLandmark, x: 1 - oppositeLandmark.x };
+  }
+  return { x: hipLandmark.x, y: hipLandmark.y - 0.25, visibility: ENGINE.VISIBILITY_THRESHOLD };
 }
 
 
 /**
  * Helper function to get the elbow landmark, handling occlusion and mirroring.
- * @param {Array} lm - The array of landmarks.
- * @param {number} idxPrincipale - The index of the main elbow landmark.
- * @param {Object} spalla - The shoulder landmark.
- * @param {Object} polso - The wrist landmark.
+ * @param {Array} landmarks - The array of landmarks.
+ * @param {number} primaryIndex - The index of the main elbow landmark.
+ * @param {Object} shoulderLandmark - The shoulder landmark.
+ * @param {Object} wristLandmark - The wrist landmark.
  * @returns {Object} - The elbow landmark or a default value.
  */
-function getElbowLandmark(lm, idxPrincipale, spalla, polso) {
-  const idxOpposto = idxPrincipale === 13 ? 14 : 13;
-  const principale = lm[idxPrincipale];
-  const opposto = lm[idxOpposto];
-  if (principale && getValidationVisibility(principale) >= VISIBILITY_EXIT_THRESHOLD) return principale;
-  if (opposto && getValidationVisibility(opposto) >= VISIBILITY_EXIT_THRESHOLD) return { ...opposto, x: 1 - opposto.x };
-  if (spalla && polso) {
-    return { x: (spalla.x + polso.x) / 2, y: (spalla.y + polso.y) / 2, visibility: ENGINE.VISIBILITY_THRESHOLD };
+function getElbowLandmark(landmarks, primaryIndex, shoulderLandmark, wristLandmark) {
+  const oppositeIndex = primaryIndex === 13 ? 14 : 13;
+  const primaryLandmark = landmarks[primaryIndex];
+  const oppositeLandmark = landmarks[oppositeIndex];
+  if (primaryLandmark && getValidationVisibility(primaryLandmark) >= VISIBILITY_EXIT_THRESHOLD) return primaryLandmark;
+  if (oppositeLandmark && getValidationVisibility(oppositeLandmark) >= VISIBILITY_EXIT_THRESHOLD) {
+    return { ...oppositeLandmark, x: 1 - oppositeLandmark.x };
   }
-  return principale;
+  if (shoulderLandmark && wristLandmark) {
+    return {
+      x: (shoulderLandmark.x + wristLandmark.x) / 2,
+      y: (shoulderLandmark.y + wristLandmark.y) / 2,
+      visibility: ENGINE.VISIBILITY_THRESHOLD,
+    };
+  }
+  return primaryLandmark;
 }
 
 /**
  * Helper function to check if the session has timed out due to inactivity.
- * @param {Object} stato - The current state of the exercise.
+ * @param {Object} state - The current state of the exercise.
  */
-function checkTimeout(stato) {
-  const adesso = Date.now();
-  if (stato.movementState === 'STANDING') {
-    stato.lastActiveTime = adesso;
+function checkTimeout(state) {
+  const now = Date.now();
+  if (state.movementState === 'STANDING') {
+    state.lastActiveTime = now;
     return;
   }
-  if (adesso - stato.lastActiveTime > ENGINE.SESSION_TIMEOUT_MS) {
-    stato.movementState = 'STANDING';
-    stato.metrics.deepEnough = false;
-    stato.metrics.targetReached = false;
-    stato.metrics.faults = new Set();
-    stato.metrics.lowestKneeAngle = 180;
-    stato.metrics.lowestElbowAngle = 180;
-    stato.metrics.lowestHipAngle = 180;
-    stato.lastAngleHistory = [];
-    stato.lastActiveTime = adesso;
+  if (now - state.lastActiveTime > ENGINE.SESSION_TIMEOUT_MS) {
+    state.movementState = 'STANDING';
+    state.metrics.deepEnough = false;
+    state.metrics.targetReached = false;
+    state.metrics.lowestKneeAngle = 180;
+    state.metrics.lowestElbowAngle = 180;
+    state.metrics.bottomFrames = 0;
+    state.metrics.lockoutFrames = 0;
+    state.metrics.bottomWristY = null;
+    state.metrics.lockoutWristY = null;
+    state.metrics.squatTopFrames = 0;
+    state.metrics.squatAttemptStartHip = null;
+    state.metrics.squatAttemptTranslation = 0;
+    state.metrics.squatLowestHipY = null;
+    state.metrics.squatLegLength = null;
+    state.lastAngleHistory = [];
+    state.lastActiveTime = now;
   }
 }
 
 /**
  * Helper function to check if the current angle indicates an ascent phase.
- * @param {Object} stato - The current state of the exercise.
- * @param {number} angoloAttuale - The current angle being evaluated.
+ * @param {Object} state - The current state of the exercise.
+ * @param {number} currentAngle - The current angle being evaluated.
  * @returns {boolean} - True if the current angle indicates an ascent phase, false otherwise.
  */
-function checkAscent(stato, angoloAttuale) {
-  stato.lastAngleHistory.push(angoloAttuale);
-  if (stato.lastAngleHistory.length > ENGINE.ASCENT_HISTORY_LEN) {
-    stato.lastAngleHistory.shift();
+function checkAscent(state, currentAngle) {
+  state.lastAngleHistory.push(currentAngle);
+  if (state.lastAngleHistory.length > ENGINE.ASCENT_HISTORY_LEN) {
+    state.lastAngleHistory.shift();
   }
-  if (stato.lastAngleHistory.length < 3) return false;
+  if (state.lastAngleHistory.length < 3) return false;
 
-  const angoloPiuVecchio = stato.lastAngleHistory[0];
-  return angoloAttuale > angoloPiuVecchio + ENGINE.ASCENT_MIN_DELTA_DEG;
+  const oldestAngle = state.lastAngleHistory[0];
+  return currentAngle > oldestAngle + ENGINE.ASCENT_MIN_DELTA_DEG;
 }
 
 /**
  * Helper function to handle occlusion of landmarks.
- * @param {Object} stato - The current state of the exercise.
+ * @param {Object} state - The current state of the exercise.
  * @returns {Object} - An object indicating if the landmarks are occluded and if a reset is needed.
  */
-function handleOcclusion(stato) {
-  if (!stato.occludedSince) {
-    stato.occludedSince = Date.now();
+function handleOcclusion(state) {
+  if (!state.occludedSince) {
+    state.occludedSince = Date.now();
     return { occluded: true, shouldReset: false };
   }
-  if (Date.now() - stato.occludedSince > ENGINE.OCCLUSION_RESET_MS && stato.movementState !== 'STANDING') {
+  if (Date.now() - state.occludedSince > ENGINE.OCCLUSION_RESET_MS && state.movementState !== 'STANDING') {
     return { occluded: true, shouldReset: true };
   }
   return { occluded: true, shouldReset: false };
@@ -176,25 +207,27 @@ function handleOcclusion(stato) {
 
 /**
  * Helper function to check visibility and occlusion of required landmarks.
- * @param {Object} stato - The current state of the exercise.
- * @param {Array} lm - The array of landmarks.
- * @param {Array} indiciRichiesti - The indices of required landmarks to check.
+ * @param {Object} state - The current state of the exercise.
+ * @param {Array} landmarks - The array of landmarks.
+ * @param {Array} requiredIndices - The indices of required landmarks to check.
  * @returns {Object} - An object indicating if the landmarks are visible and not occluded, and the resulting state if not.
  */
-function verificaVisibilitaEOcclusione(stato, lm, indiciRichiesti) {
-  const visibile = indiciRichiesti.every((i) => getValidationVisibility(lm[i]) >= VISIBILITY_EXIT_THRESHOLD);
+function validateLandmarkVisibility(state, landmarks, requiredIndices) {
+  const areVisible = requiredIndices.every(
+    (index) => getValidationVisibility(landmarks[index]) >= VISIBILITY_EXIT_THRESHOLD
+  );
 
-  if (!visibile) {
-    const { shouldReset } = handleOcclusion(stato);
-    const statoRisultante = shouldReset ? createInitialState() : stato;
+  if (!areVisible) {
+    const { shouldReset } = handleOcclusion(state);
+    const resultingState = shouldReset ? createInitialState() : state;
     return {
       ok: false,
-      result: { state: statoRisultante, event: null, primaryAngle: null, secondaryAngle: null, isTarget: false },
+      result: { state: resultingState, event: null, primaryAngle: null, secondaryAngle: null, isTarget: false },
     };
   }
 
-  stato.occludedSince = null;
-  checkTimeout(stato);
+  state.occludedSince = null;
+  checkTimeout(state);
   return { ok: true };
 }
 
@@ -210,7 +243,7 @@ export function processSquat(stato, landmarks, lato) {
   const { hip, knee, ankle } = ESERCIZI.SQUAT.landmarks[lato];
   const lm = landmarks;
   const adesso = Date.now();
-  const guardia = verificaVisibilitaEOcclusione(stato, lm, [hip, knee, ankle]);
+  const guardia = validateLandmarkVisibility(stato, lm, [hip, knee, ankle]);
   if (!guardia.ok) return guardia.result;
 
   const ginocchioGrezzo = calculateAngle(lm[hip], lm[knee], lm[ankle]);
@@ -218,6 +251,47 @@ export function processSquat(stato, landmarks, lato) {
   const angoloGinocchio = stato.smoothedPrimary;
   const m = stato.metrics;
   let evento = null;
+
+  // Arm squat validation only after a stable standing setup. This keeps
+  // walk-in and unrack movements outside the repetition state machine.
+  if (!m.squatArmed) {
+    if (angoloGinocchio < cfg.topKnee) {
+      m.squatReadyFrames = 0;
+      m.squatReadyHip = null;
+      m.squatReadyAngleMin = null;
+      m.squatReadyAngleMax = null;
+    } else if (!m.squatReadyHip) {
+      m.squatReadyFrames = 1;
+      m.squatReadyHip = { x: lm[hip].x, y: lm[hip].y };
+      m.squatReadyAngleMin = angoloGinocchio;
+      m.squatReadyAngleMax = angoloGinocchio;
+    } else {
+      const hipDisplacement = Math.hypot(
+        lm[hip].x - m.squatReadyHip.x,
+        lm[hip].y - m.squatReadyHip.y
+      );
+      const angleMin = Math.min(m.squatReadyAngleMin, angoloGinocchio);
+      const angleMax = Math.max(m.squatReadyAngleMax, angoloGinocchio);
+      const stableStanding = hipDisplacement <= cfg.readyMaxHipDisplacement &&
+        angleMax - angleMin <= cfg.readyMaxAngleRange;
+
+      if (stableStanding) {
+        m.squatReadyFrames += 1;
+        m.squatReadyAngleMin = angleMin;
+        m.squatReadyAngleMax = angleMax;
+      } else {
+        m.squatReadyFrames = 1;
+        m.squatReadyHip = { x: lm[hip].x, y: lm[hip].y };
+        m.squatReadyAngleMin = angoloGinocchio;
+        m.squatReadyAngleMax = angoloGinocchio;
+      }
+    }
+
+    m.squatArmed = m.squatReadyFrames >= cfg.readyHoldFrames;
+    stato.movementState = 'STANDING';
+    stato.lastAngle = angoloGinocchio;
+    return { state: stato, event: null, primaryAngle: angoloGinocchio, secondaryAngle: stato.smoothedSecondary, isTarget: false };
+  }
 
   if (adesso - stato.startTime < ENGINE.SETUP_GRACE_MS) {
     stato.lastAngle = angoloGinocchio;
@@ -235,12 +309,28 @@ export function processSquat(stato, landmarks, lato) {
     if (angoloGinocchio <= cfg.bottomKnee) m.deepEnough = true;
   };
 
+  // Track whole-body translation separately from vertical squat travel so a
+  // walkout can be discarded without weakening shallow-squat validation.
+  if (stato.movementState !== 'STANDING' && m.squatAttemptStartHip) {
+    const translation = Math.hypot(
+      lm[hip].x - m.squatAttemptStartHip.x,
+      (lm[hip].z ?? 0) - m.squatAttemptStartHip.z
+    );
+    m.squatAttemptTranslation = Math.max(m.squatAttemptTranslation, translation);
+    m.squatLowestHipY = Math.max(m.squatLowestHipY ?? lm[hip].y, lm[hip].y);
+  }
+
   if (stato.movementState === 'STANDING') {
     if (angoloGinocchio < cfg.topKnee - 20) {
       stato.movementState = 'DESCENDING';
       m.deepEnough = false;
       m.lowestKneeAngle = angoloGinocchio;
       m.repStartTime = adesso;
+      m.squatTopFrames = 0;
+      m.squatAttemptStartHip = { x: lm[hip].x, y: lm[hip].y, z: lm[hip].z ?? 0 };
+      m.squatAttemptTranslation = 0;
+      m.squatLowestHipY = lm[hip].y;
+      m.squatLegLength = Math.hypot(lm[hip].x - lm[ankle].x, lm[hip].y - lm[ankle].y);
       stato.lastAngleHistory = [];
     }
   }
@@ -250,24 +340,52 @@ export function processSquat(stato, landmarks, lato) {
   }
   else if (stato.movementState === 'ASCENDING') {
     controllaProfondita();
+    // Knee extension alone can spike while the athlete is still in the hole;
+    // hip ascent provides an independent, body-scale-normalized lockout check.
+    const hipAscent = (m.squatLowestHipY ?? lm[hip].y) - lm[hip].y;
+    const requiredHipAscent = (m.squatLegLength ?? 0) * (cfg.minHipAscentLegRatio ?? 0.12);
+    const standingLockout = angoloGinocchio > cfg.topKnee && hipAscent >= requiredHipAscent;
+    m.squatTopFrames = standingLockout ? m.squatTopFrames + 1 : 0;
 
-    if (angoloGinocchio > cfg.topKnee) {
+    if (m.squatTopFrames >= (cfg.topHoldFrames ?? 1)) {
 
-      if (m.lowestKneeAngle > cfg.minAttemptKnee) {
+      const wasPreparation = !m.deepEnough &&
+        m.squatAttemptTranslation >= (cfg.preparationTranslation ?? Number.POSITIVE_INFINITY);
+
+      if (m.lowestKneeAngle > cfg.minAttemptKnee || wasPreparation) {
         stato.movementState = 'STANDING';
         m.deepEnough = false;
         m.lowestKneeAngle = 180;
+        m.squatTopFrames = 0;
+        m.squatAttemptStartHip = null;
+        m.squatAttemptTranslation = 0;
+        m.squatLowestHipY = null;
+        m.squatLegLength = null;
+        if (wasPreparation) {
+          m.squatArmed = false;
+          m.squatReadyFrames = 0;
+          m.squatReadyHip = null;
+          m.squatReadyAngleMin = null;
+          m.squatReadyAngleMax = null;
+        }
         stato.lastAngleHistory = [];
         return { state: stato, event: null, primaryAngle: angoloGinocchio, secondaryAngle: stato.smoothedSecondary, isTarget: false };
       }
 
-      evento = m.deepEnough
-        ? { type: 'VALID_REP', faults: [] }
-        : { type: 'NO_REP', faults: ['Mancato superamento del parallelo'] };
+      if (hasCountingVisibility(lm, [hip, knee, ankle])) {
+        evento = m.deepEnough
+          ? { type: 'VALID_REP', faults: [] }
+          : { type: 'NO_REP', faults: ['Mancato superamento del parallelo'] };
+      }
 
       stato.movementState = 'STANDING';
       m.deepEnough = false;
       m.lowestKneeAngle = 180;
+      m.squatTopFrames = 0;
+      m.squatAttemptStartHip = null;
+      m.squatAttemptTranslation = 0;
+      m.squatLowestHipY = null;
+      m.squatLegLength = null;
       stato.lastAngleHistory = [];
       m.cooldownUntil = adesso + cfg.cooldownMs;
     }
@@ -289,7 +407,7 @@ export function processDeadlift(stato, landmarks, lato) {
   const { shoulder: idxSpalla, hip, knee, ankle } = ESERCIZI.DEADLIFT.landmarks[lato];
   const lm = landmarks;
   const adesso = Date.now();
-  const guardia = verificaVisibilitaEOcclusione(stato, lm, [hip, knee, ankle]);
+  const guardia = validateLandmarkVisibility(stato, lm, [hip, knee, ankle]);
   if (!guardia.ok) return guardia.result;
 
   const spallaLm = getShoulderLandmark(lm, idxSpalla, lm[hip]);
@@ -335,7 +453,7 @@ export function processDeadlift(stato, landmarks, lato) {
     }
   }
   else if (stato.movementState === 'LIFTING') {
-    if (eretto) {
+    if (eretto && hasCountingVisibility(lm, [hip, knee, ankle])) {
       evento = { type: 'VALID_REP', faults: [] };
       m.targetReached = true;
 
@@ -358,10 +476,10 @@ export function processDeadlift(stato, landmarks, lato) {
  */
 export function processOverheadPress(stato, landmarks, lato) {
   const cfg = ESERCIZI.OVERHEAD_PRESS.thresholds;
-  const { shoulder: idxSpalla, elbow: idxGomito, wrist, hip, knee, ankle } = ESERCIZI.OVERHEAD_PRESS.landmarks[lato];
+  const { shoulder: idxSpalla, elbow: idxGomito, wrist, hip } = ESERCIZI.OVERHEAD_PRESS.landmarks[lato];
   const lm = landmarks;
   const adesso = Date.now();
-  const guardia = verificaVisibilitaEOcclusione(stato, lm, [idxSpalla, wrist, hip, knee, ankle]);
+  const guardia = validateLandmarkVisibility(stato, lm, [idxSpalla, idxGomito, wrist]);
   if (!guardia.ok) return guardia.result;
 
   const gomitoLm = getElbowLandmark(lm, idxGomito, lm[idxSpalla], lm[wrist]);
@@ -375,14 +493,26 @@ export function processOverheadPress(stato, landmarks, lato) {
   const m = stato.metrics;
   let evento = null;
 
+  // A press can only progress through its state machine while the arm used to
+  // validate it is directly tracked. Estimated or frozen joints may keep the
+  // overlay stable, but they must never carry an attempt toward a rep.
+  const armIsVisibleForCounting = hasCountingVisibility(lm, [idxSpalla, idxGomito, wrist]);
+  if (!armIsVisibleForCounting) {
+    // Hidden joints pause the state machine and clear a partially observed
+    // transition. Already observed lockout frames are preserved but cannot be
+    // incremented until the arm is directly tracked again.
+    stato.lastAngle = angoloGomito;
+    return { state: stato, event: null, primaryAngle: angoloGomito, secondaryAngle: angoloTronco, isTarget: false };
+  }
+  const polsoSopraSpalla = lm[wrist].y < lm[idxSpalla].y - (cfg.wristAboveShoulderMargin ?? 0.06);
+  const wristMovedUp = (m.bottomWristY ?? lm[wrist].y) - lm[wrist].y >= (cfg.minWristTravelY ?? 0);
+  const lockoutFisico = polsoSopraSpalla && wristMovedUp && angoloGomito > cfg.topElbow;
+  const mostraLockout = () => polsoSopraSpalla && angoloGomito > cfg.topElbow &&
+    (stato.movementState === 'ASCENDING' || stato.movementState === 'LOCKED_OUT');
+
   if (adesso - stato.startTime < ENGINE.SETUP_GRACE_MS) {
     stato.lastAngle = angoloGomito;
-    return { state: stato, event: null, primaryAngle: angoloGomito, secondaryAngle: angoloTronco, isTarget: m.targetReached || angoloGomito > cfg.topElbow };
-  }
-
-  if (adesso < m.cooldownUntil) {
-    stato.lastAngle = angoloGomito;
-    return { state: stato, event: null, primaryAngle: angoloGomito, secondaryAngle: angoloTronco, isTarget: m.targetReached || angoloGomito > cfg.topElbow };
+    return { state: stato, event: null, primaryAngle: angoloGomito, secondaryAngle: angoloTronco, isTarget: mostraLockout() };
   }
 
   m.lowestElbowAngle = Math.min(m.lowestElbowAngle ?? 180, angoloGomito);
@@ -394,53 +524,82 @@ export function processOverheadPress(stato, landmarks, lato) {
       m.repStartTime = adesso;
       stato.lastAngleHistory = [];
       m.targetReached = false;
+      m.bottomFrames = angoloGomito <= cfg.minAttemptElbow ? 1 : 0;
+      m.lockoutFrames = 0;
+      m.bottomWristY = lm[wrist].y;
     }
   }
   else if (stato.movementState === 'DESCENDING') {
-    if (checkAscent(stato, angoloGomito)) {
-      stato.movementState = 'ASCENDING';
+    m.bottomWristY = Math.max(m.bottomWristY ?? lm[wrist].y, lm[wrist].y);
+
+    if (angoloGomito <= cfg.minAttemptElbow) {
+      m.bottomFrames = (m.bottomFrames ?? 0) + 1;
+    }
+
+    if ((m.bottomFrames ?? 0) >= (cfg.bottomHoldFrames ?? 1)) {
+      // A directly observed lockout can close the ascent even when plates hid
+      // the intermediate reversal frames. The bottom and wrist travel still
+      // have to have been observed before this shortcut is allowed.
+      if (lockoutFisico) {
+        stato.movementState = 'ASCENDING';
+        m.lockoutFrames = 1;
+      } else if (checkAscent(stato, angoloGomito)) {
+        stato.movementState = 'ASCENDING';
+        m.lockoutFrames = 0;
+      }
     }
   }
   else if (stato.movementState === 'ASCENDING') {
-    const polsoSopraSpalla = lm[wrist].y < lm[idxSpalla].y - (cfg.wristAboveShoulderMargin ?? 0.06);
-    const lockoutStandard = angoloGomito > cfg.topElbow;
-    const lockoutConOcclusione = polsoSopraSpalla && angoloGomito > (cfg.topElbowOccluded ?? cfg.topElbow);
+    m.lockoutFrames = lockoutFisico ? (m.lockoutFrames ?? 0) + 1 : 0;
 
-    if (lockoutStandard || lockoutConOcclusione) {
-
-      if (m.lowestElbowAngle > cfg.minAttemptElbow) {
-        stato.movementState = 'STANDING';
-        m.lowestElbowAngle = 180;
-        stato.lastAngleHistory = [];
-        stato.lastAngle = angoloGomito;
-        return { state: stato, event: null, primaryAngle: angoloGomito, secondaryAngle: angoloTronco, isTarget: false };
-      }
-
+    if ((m.lockoutFrames ?? 0) >= (cfg.lockoutHoldFrames ?? 1) && adesso >= m.cooldownUntil) {
       evento = { type: 'VALID_REP', faults: [] };
 
-      stato.movementState = 'STANDING';
+      stato.movementState = 'LOCKED_OUT';
       m.lowestElbowAngle = 180;
+      m.bottomFrames = 0;
+      m.lockoutFrames = 0;
+      m.bottomWristY = null;
+      m.lockoutWristY = lm[wrist].y;
       stato.lastAngleHistory = [];
       m.cooldownUntil = adesso + cfg.cooldownMs;
       m.targetReached = true;
     }
   }
+  else if (stato.movementState === 'LOCKED_OUT') {
+    const wristLoweredFromLockout = lm[wrist].y - (m.lockoutWristY ?? lm[wrist].y) >=
+      (cfg.rearmWristDropY ?? 0.025);
+
+    // Rearm while the descending arm is still visible, before plates can hide
+    // the elbow and wrist at the bottom of the following repetition.
+    if (angoloGomito < cfg.bottomElbow && wristLoweredFromLockout) {
+      stato.movementState = 'DESCENDING';
+      m.targetReached = false;
+      m.lowestElbowAngle = angoloGomito;
+      m.repStartTime = adesso;
+      m.bottomFrames = angoloGomito <= cfg.minAttemptElbow ? 1 : 0;
+      m.lockoutFrames = 0;
+      m.bottomWristY = lm[wrist].y;
+      m.lockoutWristY = null;
+      stato.lastAngleHistory = [];
+    }
+  }
 
   stato.lastAngle = angoloGomito;
-  return { state: stato, event: evento, primaryAngle: angoloGomito, secondaryAngle: angoloTronco, isTarget: m.targetReached || angoloGomito > cfg.topElbow };
+  return { state: stato, event: evento, primaryAngle: angoloGomito, secondaryAngle: angoloTronco, isTarget: mostraLockout() };
 }
 
 /**
  * Route a frame update to the correct exercise processing function.
- * @param {string} esercizio - The selected exercise name.
- * @param {Object} stato - Current exercise state.
+ * @param {string} exercise - The selected exercise name.
+ * @param {Object} state - Current exercise state.
  * @param {Array} landmarks - Pose landmarks detected by MediaPipe.
- * @param {'LEFT'|'RIGHT'} lato - Side of the body to evaluate.
+ * @param {'LEFT'|'RIGHT'} side - Side of the body to evaluate.
  * @returns {Object} - Updated state, event, and angle values.
  */
-export function processFrame(esercizio, stato, landmarks, lato) {
-  if (esercizio === 'SQUAT') return processSquat(stato, landmarks, lato);
-  if (esercizio === 'DEADLIFT') return processDeadlift(stato, landmarks, lato);
-  if (esercizio === 'OVERHEAD_PRESS') return processOverheadPress(stato, landmarks, lato);
-  return { state: stato, event: null };
+export function processFrame(exercise, state, landmarks, side) {
+  if (exercise === 'SQUAT') return processSquat(state, landmarks, side);
+  if (exercise === 'DEADLIFT') return processDeadlift(state, landmarks, side);
+  if (exercise === 'OVERHEAD_PRESS') return processOverheadPress(state, landmarks, side);
+  return { state, event: null };
 }
