@@ -3,6 +3,64 @@
  * @description Pure helper functions for MediaPipe landmarks and spatial filtering.
  */
 
+const SUBJECT_ANCHOR_INDICES = [11, 12, 23, 24, 25, 26, 27, 28];
+const MAX_SUBJECT_FRAME_DISTANCE = 0.18;
+
+function calculatePoseArea(landmarks) {
+    const anchors = SUBJECT_ANCHOR_INDICES
+        .map(index => landmarks[index])
+        .filter(point => point && Number.isFinite(point.x) && Number.isFinite(point.y));
+
+    if (anchors.length === 0) return 0;
+
+    const xs = anchors.map(point => point.x);
+    const ys = anchors.map(point => point.y);
+    return (Math.max(...xs) - Math.min(...xs)) * (Math.max(...ys) - Math.min(...ys));
+}
+
+function calculatePoseDistance(currentPose, previousPose) {
+    const distances = SUBJECT_ANCHOR_INDICES.flatMap(index => {
+        const current = currentPose[index];
+        const previous = previousPose[index];
+        if (!current || !previous) return [];
+        if (![current.x, current.y, previous.x, previous.y].every(Number.isFinite)) return [];
+        return [Math.hypot(current.x - previous.x, current.y - previous.y)];
+    });
+
+    if (distances.length === 0) return Number.POSITIVE_INFINITY;
+    return distances.reduce((sum, distance) => sum + distance, 0) / distances.length;
+}
+
+/**
+ * Selects the largest pose on initial acquisition, then preserves subject
+ * identity by choosing the candidate closest to the previously tracked pose.
+ * @param {Array<Array>} candidates - Pose candidates returned by MediaPipe.
+ * @param {Array|null} previousPose - Previously selected raw pose landmarks.
+ * @returns {Array|null} - Selected pose landmarks, or null after an abrupt subject switch.
+ */
+export function selectTrackedPose(candidates, previousPose = null) {
+    if (!candidates?.length) return null;
+
+    if (!previousPose) {
+        return candidates.reduce((largest, candidate) =>
+            calculatePoseArea(candidate) > calculatePoseArea(largest) ? candidate : largest
+        );
+    }
+
+    let closestPose = null;
+    let closestDistance = Number.POSITIVE_INFINITY;
+
+    candidates.forEach(candidate => {
+        const distance = calculatePoseDistance(candidate, previousPose);
+        if (distance < closestDistance) {
+            closestDistance = distance;
+            closestPose = candidate;
+        }
+    });
+
+    return closestDistance <= MAX_SUBJECT_FRAME_DISTANCE ? closestPose : null;
+}
+
 /**
  * Determines which side of the body (left/right) is better framed by the
  * camera, combining two independent signals returned by MediaPipe:

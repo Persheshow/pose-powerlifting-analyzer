@@ -343,10 +343,10 @@ export function processDeadlift(stato, landmarks, lato) {
  */
 export function processOverheadPress(stato, landmarks, lato) {
   const cfg = ESERCIZI.OVERHEAD_PRESS.thresholds;
-  const { shoulder: idxSpalla, elbow: idxGomito, wrist, hip, knee, ankle } = ESERCIZI.OVERHEAD_PRESS.landmarks[lato];
+  const { shoulder: idxSpalla, elbow: idxGomito, wrist, hip } = ESERCIZI.OVERHEAD_PRESS.landmarks[lato];
   const lm = landmarks;
   const adesso = Date.now();
-  const guardia = verificaVisibilitaEOcclusione(stato, lm, [idxSpalla, hip, knee, ankle]);
+  const guardia = verificaVisibilitaEOcclusione(stato, lm, [idxSpalla]);
   if (!guardia.ok) return guardia.result;
 
   const gomitoLm = getElbowLandmark(lm, idxGomito, lm[idxSpalla], lm[wrist]);
