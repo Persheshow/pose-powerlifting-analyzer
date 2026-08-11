@@ -2,9 +2,11 @@ import { useRef, useCallback, useState } from 'react';
 import { ENGINE } from '../config/exercises';
 
 const TIPI_PREFERITI = [
+    // H.264/AVC is the most broadly hardware-accelerated format on mobile.
+    'video/mp4;codecs=avc1.42E01E',
+    'video/mp4;codecs=avc1.4D401E',
     'video/mp4',
     'video/webm;codecs=vp8',
-    'video/webm;codecs=vp9',
     'video/webm',
 ];
 

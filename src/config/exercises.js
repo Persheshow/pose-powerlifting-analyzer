@@ -93,8 +93,10 @@ export const ENGINE = {
   WATERMARK_MS: 2500,
   CAMERA_WIDTH_IDEAL: 1280,
   CAMERA_HEIGHT_IDEAL: 720,
+  // Keep capture and canvas recording at a stable, mobile-friendly frame rate.
+  RECORDING_FPS: 30,
   // Video bitrate requested to MediaRecorder for exporting.
-  RECORDING_BITRATE: 8_000_000, // 8 Mbps
+  RECORDING_BITRATE: 4_000_000, // 4 Mbps
   // Inference interval for pose detection (1000 ms / 33 ms = 30.3 FPS).
   INTERVALLO_INFERENZA_MS: 33,
 };

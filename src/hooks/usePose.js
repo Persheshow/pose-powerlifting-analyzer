@@ -153,7 +153,7 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
               facingMode: latoCamera,
               width: { ideal: ENGINE?.CAMERA_WIDTH_IDEAL || 640 },
               height: { ideal: ENGINE?.CAMERA_HEIGHT_IDEAL || 480 },
-              frameRate: { ideal: 30, max: 60 }
+              frameRate: { ideal: ENGINE.RECORDING_FPS || 30, max: ENGINE.RECORDING_FPS || 30 }
             },
             audio: false,
           });
