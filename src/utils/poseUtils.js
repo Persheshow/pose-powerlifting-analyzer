@@ -1,8 +1,3 @@
-/**
- * @file poseUtils.js
- * @description Pure helper functions for MediaPipe landmarks and spatial filtering.
- */
-
 const SUBJECT_ANCHOR_INDICES = [11, 12, 23, 24, 25, 26, 27, 28];
 const MAX_SUBJECT_FRAME_DISTANCE = 0.18;
 

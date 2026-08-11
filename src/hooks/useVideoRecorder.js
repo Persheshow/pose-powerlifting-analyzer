@@ -1,4 +1,4 @@
-import { useRef, useCallback, useState } from 'react';
+import { useRef, useCallback, useEffect, useState } from 'react';
 import { ENGINE } from '../config/exercises';
 
 const TIPI_PREFERITI = [
@@ -10,10 +10,6 @@ const TIPI_PREFERITI = [
     'video/webm',
 ];
 
-/**
- * Determine the best supported video type for MediaRecorder.
- * @returns {string|null} - The supported type or null if none are supported.
- */
 function scegliTipoSupportato() {
     if (typeof MediaRecorder === 'undefined' || typeof MediaRecorder.isTypeSupported !== 'function') {
         return null;
@@ -21,11 +17,6 @@ function scegliTipoSupportato() {
     return TIPI_PREFERITI.find((tipo) => MediaRecorder.isTypeSupported(tipo)) || null;
 }
 
-/**
- * Infer the file extension from a recorded video type.
- * @param {string|null} tipo - type reported by MediaRecorder.
- * @returns {string} - File extension to use for the downloaded file.
- */
 function extractVideoFormat(tipo) {
     if (tipo && tipo.startsWith('video/mp4')) return 'mp4';
     return 'webm';
@@ -35,12 +26,6 @@ function extractCleanMimeType(tipo) {
     return tipo?.split(';')[0] || 'video/webm';
 }
 
-/**
- * Custom React hook that records a canvas stream and exposes recording controls.
- * @param {Object} canvasRef - React ref to the canvas element to record.
- * @param {Function} setIsRecording - Setter function to update recording state.
- * @returns {Object} - Recording control callbacks and pending recording data.
- */
 export function useVideoRecorder(canvasRef, setIsRecording) {
     const registratoreRef = useRef(null);
     const pezziVideoRef = useRef([]);
@@ -52,11 +37,9 @@ export function useVideoRecorder(canvasRef, setIsRecording) {
     const [pendingRecording, setPendingRecording] = useState(null);
     const pendingRecordingRef = useRef(null);
 
-    /**
-     * Start recording the canvas stream and begin collecting video chunks.
-     */
     const startRecording = useCallback(() => {
         if (!canvasRef.current) return;
+        if (registratoreRef.current && registratoreRef.current.state !== 'inactive') return;
 
         const recordingFps = ENGINE.RECORDING_FPS || 30;
         const flusso = canvasRef.current.captureStream(recordingFps);
@@ -69,8 +52,15 @@ export function useVideoRecorder(canvasRef, setIsRecording) {
                 ? new MediaRecorder(flusso, { mimeType: tipoSupportato, videoBitsPerSecond: ENGINE.RECORDING_BITRATE })
                 : new MediaRecorder(flusso, { videoBitsPerSecond: ENGINE.RECORDING_BITRATE });
         } catch {
-            registratoreRef.current = new MediaRecorder(flusso);
-            tipoSceltoRef.current = null;
+            try {
+                registratoreRef.current = new MediaRecorder(flusso);
+                tipoSceltoRef.current = null;
+            } catch (error) {
+                flusso.getTracks().forEach((track) => track.stop());
+                flussoRef.current = null;
+                console.error('Impossibile avviare la registrazione video:', error);
+                return;
+            }
         }
 
         registratoreRef.current.ondataavailable = (e) => {
@@ -93,15 +83,10 @@ export function useVideoRecorder(canvasRef, setIsRecording) {
             flussoRef.current?.getTracks().forEach((track) => track.stop());
             flussoRef.current = null;
         };
-        registratoreRef.current.start(ENGINE.RECORDING_TIMESLICE_MS || 1000);
+        registratoreRef.current.start(ENGINE.RECORDING_TIMESLICE_MS);
         setIsRecording(true);
     }, [canvasRef, setIsRecording]);
 
-    /**
-     * Stop the active recording and optionally keep the resulting video.
-     * @param {boolean} salvaVideo - Whether to save the recorded file.
-     * @param {Object|null} riepilogo - Optional summary metadata for the recording.
-     */
     const stopRecording = useCallback((salvaVideo = true, riepilogo = null) => {
         if (registratoreRef.current && (registratoreRef.current.state === "recording" || registratoreRef.current.state === "paused")) {
             vuoleSalvareRef.current = salvaVideo;
@@ -114,27 +99,18 @@ export function useVideoRecorder(canvasRef, setIsRecording) {
         }
     }, [setIsRecording]);
 
-    /**
-     * Pause an in-progress recording.
-     */
     const pausaRegistrazione = useCallback(() => {
         if (registratoreRef.current && registratoreRef.current.state === "recording") {
             registratoreRef.current.pause();
         }
     }, []);
 
-    /**
-     * Resume a paused recording session.
-     */
     const riprendiRegistrazione = useCallback(() => {
         if (registratoreRef.current && registratoreRef.current.state === "paused") {
             registratoreRef.current.resume();
         }
     }, []);
 
-    /**
-     * Finalize and download the pending recording in its native format.
-     */
     const confermaDownload = useCallback(() => {
         const corrente = pendingRecordingRef.current;
         if (!corrente) return;
@@ -161,12 +137,20 @@ export function useVideoRecorder(canvasRef, setIsRecording) {
         setPendingRecording(null);
     }, []);
 
-    /**
-     * Discard the pending recording without downloading it.
-     */
     const scartaRegistrazione = useCallback(() => {
         pendingRecordingRef.current = null;
         setPendingRecording(null);
+    }, []);
+
+    // A recorder may outlive the component while its final chunk is pending.
+    useEffect(() => () => {
+        const registratore = registratoreRef.current;
+        if (registratore && registratore.state !== 'inactive') {
+            vuoleSalvareRef.current = false;
+            registratore.stop();
+        }
+        flussoRef.current?.getTracks().forEach((track) => track.stop());
+        flussoRef.current = null;
     }, []);
 
     return {

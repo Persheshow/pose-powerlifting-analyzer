@@ -1,10 +1,4 @@
-/**
- * @file exercises.js
- * @description Global configuration file. Every numeric threshold used by the
- * validation engine (repLogic.js) lives here: this makes the biomechanical
- * criteria for each lift visible at a glance without reading the FSM
- * implementation.
- */
+// Biomechanical thresholds stay centralized so the FSM contains no hidden constants.
 
 export const ESERCIZI = {
   SQUAT: {
@@ -59,9 +53,6 @@ export const SMOOTHING = {
   beta: 0.65,
 };
 
-/**
- * Parameters for the tracking/validation engine, independent of the specific exercise.
- */
 export const ENGINE = {
   // Minimum "visibility" threshold (MediaPipe confidence) below which a
   // landmark is considered unreliable for validation purposes.
@@ -95,6 +86,7 @@ export const ENGINE = {
   CAMERA_HEIGHT_IDEAL: 720,
   // Keep capture and canvas recording at a stable, mobile-friendly frame rate.
   RECORDING_FPS: 30,
+  RECORDING_TIMESLICE_MS: 1000,
   // Video bitrate requested to MediaRecorder for exporting.
   RECORDING_BITRATE: 4_000_000, // 4 Mbps
   // Inference interval for pose detection (1000 ms / 33 ms = 30.3 FPS).

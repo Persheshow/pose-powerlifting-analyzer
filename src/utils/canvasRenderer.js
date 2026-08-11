@@ -56,7 +56,6 @@ export function drawSkeleton(ctx, landmarks, w, h, isTargetReached, side, ex, ha
 
     if (puntoEvidenziato && puntoEvidenziato.visibility > ENGINE.DRAW_VISIBILITY_THRESHOLD) {
         ctx.beginPath();
-        // The highlighted joint reflects the current FSM target state.
         ctx.fillStyle = isTargetReached ? '#00ff88' : '#ef4444';
         ctx.arc(puntoEvidenziato.x * w, puntoEvidenziato.y * h, 6, 0, 2 * Math.PI);
         ctx.fill();

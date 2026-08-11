@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { usePose } from './hooks/usePose';
 import { useVideoRecorder } from './hooks/useVideoRecorder';
 import logoUnifi from './assets/logo_unifi.png';
@@ -34,21 +34,21 @@ const INFO_ESERCIZI = {
   }
 };
 
-/**
- * Check whether the application is running on a mobile device.
- * @returns {boolean} - True if the user agent belongs to a mobile device.
- */
 const isMobileDevice = () => {
   if (typeof navigator === 'undefined') return false;
   return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 };
+
+let sharedAudioContext = null;
 
 function playRepBeep() {
   try {
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
     if (!AudioContextClass) return;
 
-    const audioContext = new AudioContextClass();
+    const audioContext = sharedAudioContext ?? new AudioContextClass();
+    sharedAudioContext = audioContext;
+    if (audioContext.state === 'suspended') audioContext.resume();
     const oscillator = audioContext.createOscillator();
     const gainNode = audioContext.createGain();
 
@@ -68,10 +68,6 @@ function playRepBeep() {
   }
 }
 
-/**
- * Main application component that renders UI, handles exercise selection, and integrates
- * pose tracking with recording controls.
- */
 export default function App() {
   const [esercizioScelto, setEsercizioScelto] = useState('SQUAT');
   const [allenamentoAvviato, setAllenamentoAvviato] = useState(false);
@@ -87,20 +83,21 @@ export default function App() {
   const [inPausa, setInPausa] = useState(false);
   const [videoTerminato, setVideoTerminato] = useState(false);
   const [targetReps, setTargetReps] = useState(5);
+  const videoUrlRef = useRef(null);
+  const arrestoAutomaticoRef = useRef(null);
+  const conteggiRef = useRef({ valide: 0, nonValide: 0 });
 
-  /**
-   * Handle the selected video file and set it as the source for analysis.
-   * @param {Event} e - Change event from the file input.
-   */
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (file) {
+      if (videoUrlRef.current) URL.revokeObjectURL(videoUrlRef.current);
+      const nuovoVideoUrl = URL.createObjectURL(file);
+      videoUrlRef.current = nuovoVideoUrl;
       setFileCaricato(file);
-      setVideoUrl(URL.createObjectURL(file));
+      setVideoUrl(nuovoVideoUrl);
     }
   };
 
-  // Use the custom usePose hook to manage pose detection and repetition counting.
   const {
     videoRef,
     canvasRef,
@@ -111,7 +108,6 @@ export default function App() {
     reset: resetConteggio,
   } = usePose(esercizioScelto, allenamentoAvviato, cameraLato, staRegistrando, modalitaAcquisizione === 'file' ? videoUrl : null);
 
-  // Video recording controls using the custom useVideoRecorder hook.
   const {
     startRecording: avviaRegistrazione,
     stopRecording: fermaRegistrazione,
@@ -123,29 +119,45 @@ export default function App() {
   } = useVideoRecorder(canvasRef, setStaRegistrando);
   const formatoRegistrazione = pendingRecording?.mimeType?.startsWith('video/mp4') ? 'mp4' : 'webm';
 
-  // Play a beep sound whenever a valid repetition is detected.
+  useEffect(() => {
+    conteggiRef.current = { valide: ripetizioniValide, nonValide: ripetizioniNonValide };
+  }, [ripetizioniValide, ripetizioniNonValide]);
+
+  useEffect(() => () => {
+    if (videoUrlRef.current) URL.revokeObjectURL(videoUrlRef.current);
+    if (arrestoAutomaticoRef.current) clearTimeout(arrestoAutomaticoRef.current);
+  }, []);
+
   useEffect(() => {
     if (ripetizioniValide > 0) playRepBeep();
   }, [ripetizioniValide]);
 
-  // Automatically stop recording when the target number of valid repetitions is reached.
+  // Schedule the tail once: new rep events must not postpone the stop.
   useEffect(() => {
-    if (staRegistrando && targetReps > 0 && ripetizioniValide >= targetReps) {
+    if (!staRegistrando) {
+      if (arrestoAutomaticoRef.current) clearTimeout(arrestoAutomaticoRef.current);
+      arrestoAutomaticoRef.current = null;
+      return;
+    }
 
-      const timerId = setTimeout(() => {
-        fermaRegistrazione(true, { valide: ripetizioniValide, nonValide: ripetizioniNonValide });
+    if ((targetReps <= 0 || ripetizioniValide < targetReps) && arrestoAutomaticoRef.current) {
+      clearTimeout(arrestoAutomaticoRef.current);
+      arrestoAutomaticoRef.current = null;
+    }
+
+    if (targetReps > 0 && ripetizioniValide >= targetReps && !arrestoAutomaticoRef.current) {
+      arrestoAutomaticoRef.current = setTimeout(() => {
+        arrestoAutomaticoRef.current = null;
+        fermaRegistrazione(true, conteggiRef.current);
         if (modalitaAcquisizione === 'file' && videoRef.current) {
           videoRef.current.pause();
         }
         setVideoTerminato(true);
         setInPausa(false);
-      }, 3000); // 3-second delay before stopping recording
-
-      return () => clearTimeout(timerId);
+      }, 3000); // Fixed tail from the first target-reaching frame.
     }
-  }, [ripetizioniValide, targetReps, staRegistrando, fermaRegistrazione, modalitaAcquisizione, ripetizioniNonValide, videoRef]);
+  }, [ripetizioniValide, targetReps, staRegistrando, fermaRegistrazione, modalitaAcquisizione, videoRef]);
 
-  // Detect the number of available video input devices and enable dual-camera UI if possible.
   useEffect(() => {
     async function trovaFotocamere() {
       if (isMobileDevice()) {
@@ -164,7 +176,6 @@ export default function App() {
     trovaFotocamere();
   }, []);
 
-  // Countdown effect to manage the countdown timer before starting the recording.
   useEffect(() => {
     if (contoAllaRovescia === null) return;
 
@@ -179,7 +190,6 @@ export default function App() {
     }
   }, [contoAllaRovescia, avviaRegistrazione]);
 
-  // Render the setup workflow, active analysis view, and recording actions.
   return (
     <div className="min-h-screen bg-white text-[#002f6c] flex flex-col items-center p-4 font-sans selection:bg-[#002f6c] selection:text-white relative">
 

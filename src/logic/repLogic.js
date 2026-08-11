@@ -1,23 +1,10 @@
 import { ESERCIZI, SMOOTHING, ENGINE } from '../config/exercises.js';
 
-/**
- * Smooth the current angle.
- * @param {number|null} prev - The previous smoothed angle.
- * @param {number} current - The current raw angle measurement.
- * @returns {number} - The updated smoothed angle.
- */
 export function smoothAngle(prev, current) {
   if (prev === null) return current;
   return (current * SMOOTHING.alpha) + (prev * SMOOTHING.beta);
 }
 
-/**
- * Calculate the angle in degrees formed by the vectors BA and BC.
- * @param {Object} a - First point of the angle.
- * @param {Object} b - Vertex point of the angle.
- * @param {Object} c - Third point of the angle.
- * @returns {number} - Angle between vectors BA and BC in degrees.
- */
 export function calculateAngle(a, b, c) {
   const vettoreBA = { x: a.x - b.x, y: a.y - b.y };
   const vettoreBC = { x: c.x - b.x, y: c.y - b.y };
@@ -34,10 +21,6 @@ export function calculateAngle(a, b, c) {
   return (Math.acos(cosAngolo) * 180.0) / Math.PI;
 }
 
-/**
- * Create the default state object used to track exercise execution and metrics.
- * @returns {Object} - Initial state for a new exercise session.
- */
 export function createInitialState(timestampMs = null) {
   // The clock is injected by usePose: media time for files, monotonic time for
   // live capture. Null delays initialization until the first processed frame.
@@ -49,21 +32,14 @@ export function createInitialState(timestampMs = null) {
     lastAngle: 180,
     lastAngleHistory: [],
     lastActiveTime: initialTime,
+    lastObservedMovementState: 'STANDING',
     startTime: initialTime,
     occludedSince: null,
     metrics: {
-      faults: new Set(),
-      startX: null,
-      maxAscentAngle: 0,
-      lockedAtStart: false,
       deepEnough: false,
-      minWristY: 1.0,
-      startKneeAngle: null,
       cooldownUntil: 0,
-      repStartTime: 0,
       lowestKneeAngle: 180,
       lowestElbowAngle: 180,
-      lowestHipAngle: 180,
       targetReached: false,
       squatSetActive: false,
       // Squat trajectory metrics reject setup and walk-away motion around the rack.
@@ -157,13 +133,7 @@ function resetPressAttempt(stato) {
   stato.metrics.pressLockoutCandidateSince = null;
 }
 
-/**
- * Helper function to get the shoulder landmark, handling occlusion and mirroring.
- * @param {Array} lm - The array of landmarks.
- * @param {number} idxPrincipale - The index of the main shoulder landmark.
- * @param {Object} anca - The hip landmark.
- * @returns {Object} - The shoulder landmark or a default value.
- */
+// Deadlift tolerates a hidden near shoulder; the press deliberately does not.
 function getShoulderLandmark(lm, idxPrincipale, anca) {
   const idxOpposto = idxPrincipale === 11 ? 12 : 11;
   const principale = lm[idxPrincipale];
@@ -192,25 +162,26 @@ function isSelectedArmVisible(landmarks, side) {
   });
 }
 
-/**
- * Helper function to check if the session has timed out due to inactivity.
- * @param {Object} stato - The current state of the exercise.
- */
 function checkTimeout(stato, adesso) {
   // Never read wall-clock time here: every temporal FSM decision must use the
   // same clock supplied with the current frame.
   if (stato.movementState === 'STANDING') {
     stato.lastActiveTime = adesso;
+    stato.lastObservedMovementState = 'STANDING';
+    return;
+  }
+  if (stato.lastObservedMovementState !== stato.movementState) {
+    stato.lastObservedMovementState = stato.movementState;
+    stato.lastActiveTime = adesso;
     return;
   }
   if (adesso - stato.lastActiveTime > ENGINE.SESSION_TIMEOUT_MS) {
     stato.movementState = 'STANDING';
+    stato.lastObservedMovementState = 'STANDING';
     stato.metrics.deepEnough = false;
     stato.metrics.targetReached = false;
-    stato.metrics.faults = new Set();
     stato.metrics.lowestKneeAngle = 180;
     stato.metrics.lowestElbowAngle = 180;
-    stato.metrics.lowestHipAngle = 180;
     stato.metrics.squatSetActive = false;
     stato.metrics.squatStandingGeometry = null;
     stato.metrics.squatStartGeometry = null;
@@ -223,12 +194,6 @@ function checkTimeout(stato, adesso) {
   }
 }
 
-/**
- * Helper function to check if the current angle indicates an ascent phase.
- * @param {Object} stato - The current state of the exercise.
- * @param {number} angoloAttuale - The current angle being evaluated.
- * @returns {boolean} - True if the current angle indicates an ascent phase, false otherwise.
- */
 function checkAscent(stato, angoloAttuale) {
   stato.lastAngleHistory.push(angoloAttuale);
   if (stato.lastAngleHistory.length > ENGINE.ASCENT_HISTORY_LEN) {
@@ -240,11 +205,6 @@ function checkAscent(stato, angoloAttuale) {
   return angoloAttuale > angoloPiuVecchio + ENGINE.ASCENT_MIN_DELTA_DEG;
 }
 
-/**
- * Helper function to handle occlusion of landmarks.
- * @param {Object} stato - The current state of the exercise.
- * @returns {Object} - An object indicating if the landmarks are occluded and if a reset is needed.
- */
 function handleOcclusion(stato, adesso) {
   // Occlusion duration follows the analysis timeline, not processing latency.
   if (stato.occludedSince === null) {
@@ -257,13 +217,6 @@ function handleOcclusion(stato, adesso) {
   return { occluded: true, shouldReset: false };
 }
 
-/**
- * Helper function to check visibility and occlusion of required landmarks.
- * @param {Object} stato - The current state of the exercise.
- * @param {Array} lm - The array of landmarks.
- * @param {Array} indiciRichiesti - The indices of required landmarks to check.
- * @returns {Object} - An object indicating if the landmarks are visible and not occluded, and the resulting state if not.
- */
 function verificaVisibilitaEOcclusione(stato, lm, indiciRichiesti, adesso) {
   const visibile = indiciRichiesti.every((i) => lm[i]?.visibility > ENGINE.VISIBILITY_THRESHOLD);
 
@@ -333,7 +286,6 @@ export function processSquat(stato, landmarks, lato, timestampMs = performance.n
       m.squatStartGeometry = m.squatStandingGeometry ?? geometriaSquat;
       m.squatMaxHipDescent = 0;
       m.squatMaxAnkleTravel = 0;
-      m.repStartTime = adesso;
       stato.lastAngleHistory = [];
     }
   }
@@ -394,7 +346,7 @@ export function processDeadlift(stato, landmarks, lato, timestampMs = performanc
   const adesso = timestampMs;
   if (stato.startTime === null) stato.startTime = adesso;
   if (stato.lastActiveTime === null) stato.lastActiveTime = adesso;
-  const guardia = verificaVisibilitaEOcclusione(stato, lm, [hip, knee], adesso);
+  const guardia = verificaVisibilitaEOcclusione(stato, lm, [hip, knee, ankle], adesso);
   if (!guardia.ok) return guardia.result;
 
   const spallaLm = getShoulderLandmark(lm, idxSpalla, lm[hip]);
@@ -429,14 +381,12 @@ export function processDeadlift(stato, landmarks, lato, timestampMs = performanc
     if (!eretto && angoloAnca < lockoutAnca - 15) {
       stato.movementState = 'SETUP';
       stato.lastAngleHistory = [];
-      m.repStartTime = adesso;
       m.targetReached = false;
     }
   }
   else if (stato.movementState === 'SETUP') {
     if (checkAscent(stato, angoloAnca)) {
       stato.movementState = 'LIFTING';
-      m.repStartTime = adesso;
     }
   }
   else if (stato.movementState === 'LIFTING') {
@@ -445,7 +395,6 @@ export function processDeadlift(stato, landmarks, lato, timestampMs = performanc
       m.targetReached = true;
 
       stato.movementState = 'STANDING';
-      m.repStartTime = null;
       m.cooldownUntil = adesso + cfg.cooldownMs;
     }
   }
@@ -516,7 +465,6 @@ export function processOverheadPress(stato, landmarks, lato, timestampMs = perfo
       m.lowestElbowAngle = angoloGomito;
       m.pressLowestWristElevation = geometriaPolso?.elevation ?? null;
       m.pressLockoutCandidateSince = null;
-      m.repStartTime = adesso;
       stato.lastAngleHistory = [];
       m.targetReached = false;
     }
@@ -584,14 +532,6 @@ export function processOverheadPress(stato, landmarks, lato, timestampMs = perfo
   return { state: stato, event: evento, primaryAngle: angoloGomito, secondaryAngle: angoloTronco, isTarget: angoloGomito > cfg.topElbow };
 }
 
-/**
- * Route a frame update to the correct exercise processing function.
- * @param {string} esercizio - The selected exercise name.
- * @param {Object} stato - Current exercise state.
- * @param {Array} landmarks - Pose landmarks detected by MediaPipe.
- * @param {'LEFT'|'RIGHT'} lato - Side of the body to evaluate.
- * @returns {Object} - Updated state, event, and angle values.
- */
 export function processFrame(esercizio, stato, landmarks, lato, timestampMs = performance.now()) {
   if (esercizio === 'SQUAT') return processSquat(stato, landmarks, lato, timestampMs);
   if (esercizio === 'DEADLIFT') return processDeadlift(stato, landmarks, lato, timestampMs);

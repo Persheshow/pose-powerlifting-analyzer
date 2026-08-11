@@ -119,12 +119,10 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
     }
   }, []);
 
-  // Reset the internal state and UI counters whenever the exercise, active status, camera side, or video URL changes.
   useEffect(() => {
     resetTrackingState();
   }, [esercizio, attivo, latoCamera, videoUrl, resetTrackingState]);
 
-  // Update the recording reference whenever the recording status changes, and reset the state if recording starts.
   useEffect(() => {
     let annullato = false;
 
@@ -165,7 +163,6 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
     return () => { annullato = true; };
   }, [registrazioneAttiva, videoUrl, replacePoseLandmarker, resetTrackingState]);
 
-  // Load the MediaPipe PoseLandmarker model asynchronously when the component mounts, and clean up on unmount.
   useEffect(() => {
     componenteMontatoRef.current = true;
     replacePoseLandmarker();
@@ -179,7 +176,6 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
     };
   }, [replacePoseLandmarker]);
 
-  // Start the camera or load the video when the component mounts or when the active status, camera side, or video URL changes.
   useEffect(() => {
     if (!attivo) return;
     const currentVideo = videoRef.current;
@@ -200,6 +196,8 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
         }
       };
     } else {
+      // getUserMedia may resolve after a camera switch or component cleanup.
+      let annullato = false;
       async function avviaFotocamera() {
         try {
           const stream = await navigator.mediaDevices.getUserMedia({
@@ -211,16 +209,23 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
             },
             audio: false,
           });
+          if (annullato) {
+            stream.getTracks().forEach(t => t.stop());
+            return;
+          }
           if (currentVideo) {
             currentVideo.srcObject = stream;
             currentVideo.onloadedmetadata = () => currentVideo.play();
+          } else {
+            stream.getTracks().forEach(t => t.stop());
           }
         } catch (err) {
-          setError('Impossibile accedere al sensore ottico: ' + err.message);
+          if (!annullato) setError('Impossibile accedere al sensore ottico: ' + err.message);
         }
       }
       avviaFotocamera();
       return () => {
+        annullato = true;
         if (currentVideo?.srcObject) {
           currentVideo.srcObject.getTracks().forEach(t => t.stop());
           currentVideo.srcObject = null;
@@ -229,7 +234,6 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
     }
   }, [attivo, latoCamera, videoUrl]);
 
-  // Main loop
   useEffect(() => {
     if (!attivo) return;
 
@@ -299,7 +303,6 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
               setIsTrackingLost(false);
               soggettoTracciatoRef.current = puntiGrezzi;
 
-              // Adaptive smoothing damps pose jitter without delaying real movement.
               const puntiStabilizzati = smoothLandmarksCoordinates(
                 puntiGrezzi,
                 smoothedLandmarksRef.current,
@@ -326,7 +329,6 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
                 analysisTimestampMs
               );
 
-              // Keep the displayed angles responsive while the user adjusts position.
               if (timestamp - ultimoAggiornamentoUI.current > 100) {
                 if (Math.abs((esito.primaryAngle ?? 0) - (angoliPrecRef.current.primary ?? 0)) > 1) {
                   setAngles({ primary: esito.primaryAngle, secondary: esito.secondaryAngle });
@@ -335,7 +337,6 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
                 }
               }
 
-              // Advance the repetition state only while an analysis is active.
               if (registrazioneRef.current) {
                 statoRepRef.current = esito.state;
                 ultimoBersaglioRef.current = esito.isTarget;
@@ -367,7 +368,7 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
 
         const erroreLampeggiante = messaggioHudRef.current && performance.now() < messaggioHudRef.current.expires && messaggioHudRef.current.type === 'INVALID';
 
-        // Keep drawing the latest available skeleton between inference frames.
+        // Inference is throttled, so reuse the last pose on intermediate frames.
         if (ultimoPuntiRef.current) {
           ctx.save();
           if (specchiato) {
