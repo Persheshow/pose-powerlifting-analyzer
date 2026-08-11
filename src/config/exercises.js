@@ -10,6 +10,9 @@ export const ESERCIZI = {
   SQUAT: {
     thresholds: {
       bottomKnee: 85, topKnee: 160, minAttemptKnee: 140,
+      // Trajectory limits are normalized by leg length.
+      minHipDescentLeg: 0.10,
+      maxAnkleTravelLeg: 0.35,
       cooldownMs: 800,
     },
     landmarks: {
@@ -30,6 +33,12 @@ export const ESERCIZI = {
   OVERHEAD_PRESS: {
     thresholds: {
       topElbow: 145, bottomElbow: 140, minAttemptElbow: 130,
+      // Wrist trajectory limits are normalized by torso length.
+      minWristTravelTorso: 0.45,
+      minLockoutWristElevationTorso: 0.35,
+      maxLockoutWristHorizontalOffsetTorso: 0.75,
+      // Allow a brief lockout candidate before discarding an incomplete ascent.
+      lockoutConfirmationMs: 900,
       cooldownMs: 800,
     },
     landmarks: {
