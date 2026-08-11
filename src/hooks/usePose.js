@@ -241,11 +241,11 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
               setIsTrackingLost(false);
               soggettoTracciatoRef.current = puntiGrezzi;
 
-              // Stabilize landmark coordinates with an exponential moving average.
+              // Adaptive smoothing damps pose jitter without delaying real movement.
               const puntiStabilizzati = smoothLandmarksCoordinates(
                 puntiGrezzi,
                 smoothedLandmarksRef.current,
-                0.5 // smoothing factor
+                0.5
               );
               smoothedLandmarksRef.current = puntiStabilizzati;
               ultimoPuntiRef.current = puntiStabilizzati;

@@ -87,12 +87,15 @@ export function determinaLatoInquadrato(landmarks) {
 }
 
 /**
- * Applies an Exponential Moving Average (EMA) low-pass filter to the x, y, and z
- * coordinates of each landmark to eliminate jitter.
+ * Applies a confidence-aware adaptive EMA to landmark coordinates.
+ * Small displacements are damped, while deliberate fast movements receive a
+ * higher alpha and therefore remain responsive. Low-confidence landmarks keep
+ * their last stable position instead of injecting occlusion jitter; their
+ * current visibility value is deliberately preserved for exercise validation.
  *
  * @param {Array<{x:number, y:number, z?:number, visibility?:number}>} currentLandmarks - Raw landmarks from current frame.
  * @param {Array<{x:number, y:number, z?:number, visibility?:number}>|null} prevLandmarks - Smoothed landmarks from previous frame.
- * @param {number} [alpha=0.5] - Smoothing factor
+ * @param {number} [alpha=0.5] - Base smoothing factor (kept for API compatibility).
  * @returns {Array<{x:number, y:number, z?:number, visibility?:number}>} - Smoothed landmarks.
  */
 export function smoothLandmarksCoordinates(currentLandmarks, prevLandmarks, alpha = 0.5) {
@@ -100,20 +103,43 @@ export function smoothLandmarksCoordinates(currentLandmarks, prevLandmarks, alph
         return currentLandmarks;
     }
 
-    const beta = 1 - alpha;
-
     return currentLandmarks.map((curr, idx) => {
         const prev = prevLandmarks[idx];
 
-        if (!curr || !prev || (curr.visibility !== undefined && curr.visibility < 0.5)) {
+        if (!curr || !prev) {
             return curr;
         }
 
+        const coordinatesAreValid = [curr.x, curr.y, prev.x, prev.y].every(Number.isFinite);
+        if (!coordinatesAreValid) return curr;
+
+        const displacement = Math.hypot(curr.x - prev.x, curr.y - prev.y);
+        const motion = Math.min(1, Math.max(0, (displacement - 0.002) / 0.05));
+        const minAlpha = Math.min(alpha, 0.22);
+        const maxAlpha = Math.max(alpha, 0.82);
+        let adaptiveAlpha = minAlpha + (maxAlpha - minAlpha) * motion;
+
+        const visibility = Number.isFinite(curr.visibility) ? curr.visibility : 1;
+        if (visibility < 0.5) {
+            // Occluded joints are the noisiest. Keep them visually anchored,
+            // but do not alter confidence: each exercise still decides whether
+            // that landmark is usable.
+            const confidenceScale = Math.max(0.08, visibility / 0.5);
+            adaptiveAlpha = Math.min(adaptiveAlpha * confidenceScale, 0.16);
+            if (displacement > 0) {
+                adaptiveAlpha = Math.min(adaptiveAlpha, 0.006 / displacement);
+            }
+        }
+
+        const beta = 1 - adaptiveAlpha;
+
         return {
             ...curr,
-            x: curr.x * alpha + prev.x * beta,
-            y: curr.y * alpha + prev.y * beta,
-            z: curr.z !== undefined && prev.z !== undefined ? curr.z * alpha + prev.z * beta : curr.z,
+            x: curr.x * adaptiveAlpha + prev.x * beta,
+            y: curr.y * adaptiveAlpha + prev.y * beta,
+            z: Number.isFinite(curr.z) && Number.isFinite(prev.z)
+                ? curr.z * adaptiveAlpha + prev.z * beta
+                : curr.z,
         };
     });
 }
