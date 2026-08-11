@@ -30,7 +30,7 @@ async function createPoseLandmarker() {
  * @param {string} latoCamera - Camera facing mode ('user' for front camera, 'environment' for back camera).
  * @param {boolean} registrazioneAttiva - Whether recording is active (used to control inference and rendering).
  * @param {string|null} videoUrl - Optional URL of a video to use instead of the live camera feed.
- * @returns {Object} - Refs and state variables for video, canvas, loading status, tracking status, errors, rep counts, faults, angles, and a reset function.
+ * @returns {Object} - Video/canvas refs, model status, rep counts, and reset control.
  */
 export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, videoUrl) {
   const videoRef = useRef(null);
@@ -62,8 +62,6 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
   const [error, setError] = useState(null);
   const [validReps, setValidReps] = useState(0);
   const [noReps, setNoReps] = useState(0);
-  const [faults, setFaults] = useState([]);
-  const [angles, setAngles] = useState({ primary: null, secondary: null });
 
   // Restore every stateful layer involved in an analysis, including filters
   // and subject continuity. Resetting only the counters is not sufficient.
@@ -86,8 +84,6 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
     messaggioHudRef.current = null;
     setValidReps(0);
     setNoReps(0);
-    setFaults([]);
-    setAngles({ primary: null, secondary: null });
     setIsTrackingLost(false);
   }, []);
 
@@ -215,7 +211,11 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
           }
           if (currentVideo) {
             currentVideo.srcObject = stream;
-            currentVideo.onloadedmetadata = () => currentVideo.play();
+            currentVideo.onloadedmetadata = () => {
+              currentVideo.play().catch((err) => {
+                if (!annullato) setError('Errore avvio fotocamera: ' + err.message);
+              });
+            };
           } else {
             stream.getTracks().forEach(t => t.stop());
           }
@@ -247,7 +247,6 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
         smoothedLandmarksRef.current = null;
         soggettoTracciatoRef.current = null;
         angoliPrecRef.current = { primary: null, secondary: null };
-        setAngles({ primary: null, secondary: null });
         setIsTrackingLost(true);
       }
     }
@@ -331,7 +330,6 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
 
               if (timestamp - ultimoAggiornamentoUI.current > 100) {
                 if (Math.abs((esito.primaryAngle ?? 0) - (angoliPrecRef.current.primary ?? 0)) > 1) {
-                  setAngles({ primary: esito.primaryAngle, secondary: esito.secondaryAngle });
                   angoliPrecRef.current = { primary: esito.primaryAngle, secondary: esito.secondaryAngle };
                   ultimoAggiornamentoUI.current = timestamp;
                 }
@@ -346,12 +344,10 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
                   if (isValida) {
                     contatoreValideRef.current += 1;
                     setValidReps(contatoreValideRef.current);
-                    setFaults([]);
                     messaggioHudRef.current = { type: 'VALID', text: '✓ RIPETIZIONE VALIDA', expires: performance.now() + (ENGINE?.HUD_VALID_MS || 2000) };
                   } else {
                     contatoreNonValideRef.current += 1;
                     setNoReps(contatoreNonValideRef.current);
-                    setFaults(esito.event.faults);
                     messaggioHudRef.current = { type: 'INVALID', text: `NO REP: ${esito.event.faults.join(' - ')}`, expires: performance.now() + (ENGINE?.HUD_INVALID_MS || 3000) };
                   }
                 }
@@ -420,5 +416,5 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
     }
   }
 
-  return { videoRef, canvasRef, isLoading, isTrackingLost, error, validReps, noReps, faults, angles, reset };
+  return { videoRef, canvasRef, isLoading, isTrackingLost, error, validReps, noReps, reset };
 }

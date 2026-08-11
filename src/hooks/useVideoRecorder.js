@@ -28,73 +28,93 @@ function extractCleanMimeType(tipo) {
 
 export function useVideoRecorder(canvasRef, setIsRecording) {
     const registratoreRef = useRef(null);
-    const pezziVideoRef = useRef([]);
-    const vuoleSalvareRef = useRef(true);
-    const tipoSceltoRef = useRef(null);
-    const flussoRef = useRef(null);
-    const riepilogoRef = useRef(null);
+    const sessioneRef = useRef(null);
+    const montatoRef = useRef(true);
 
     const [pendingRecording, setPendingRecording] = useState(null);
     const pendingRecordingRef = useRef(null);
 
     const startRecording = useCallback(() => {
-        if (!canvasRef.current) return;
-        if (registratoreRef.current && registratoreRef.current.state !== 'inactive') return;
+        if (!canvasRef.current) return false;
+        if (sessioneRef.current || pendingRecordingRef.current) return false;
 
         const recordingFps = ENGINE.RECORDING_FPS || 30;
         const flusso = canvasRef.current.captureStream(recordingFps);
-        flussoRef.current = flusso;
         const tipoSupportato = scegliTipoSupportato();
-        tipoSceltoRef.current = tipoSupportato;
+        let tipoUsato = tipoSupportato;
+        let registratore;
 
         try {
-            registratoreRef.current = tipoSupportato
+            registratore = tipoSupportato
                 ? new MediaRecorder(flusso, { mimeType: tipoSupportato, videoBitsPerSecond: ENGINE.RECORDING_BITRATE })
                 : new MediaRecorder(flusso, { videoBitsPerSecond: ENGINE.RECORDING_BITRATE });
         } catch {
             try {
-                registratoreRef.current = new MediaRecorder(flusso);
-                tipoSceltoRef.current = null;
+                registratore = new MediaRecorder(flusso);
+                tipoUsato = null;
             } catch (error) {
                 flusso.getTracks().forEach((track) => track.stop());
-                flussoRef.current = null;
                 console.error('Impossibile avviare la registrazione video:', error);
-                return;
+                return false;
             }
         }
 
-        registratoreRef.current.ondataavailable = (e) => {
+        const sessione = {
+            registratore,
+            flusso,
+            pezzi: [],
+            salva: true,
+            riepilogo: null,
+            tipoRichiesto: tipoUsato,
+        };
+        registratoreRef.current = registratore;
+        sessioneRef.current = sessione;
+
+        registratore.ondataavailable = (e) => {
             if (e.data && e.data.size > 0) {
-                pezziVideoRef.current.push(e.data);
+                sessione.pezzi.push(e.data);
             }
         };
 
-        registratoreRef.current.onstop = () => {
-            if (vuoleSalvareRef.current && pezziVideoRef.current.length > 0) {
-                const tipoEffettivo = tipoSceltoRef.current || registratoreRef.current?.mimeType || 'video/webm';
+        registratore.onstop = () => {
+            if (sessione.salva && sessione.pezzi.length > 0 && montatoRef.current) {
+                const tipoEffettivo = sessione.tipoRichiesto || registratore.mimeType || 'video/webm';
                 const tipoPulito = extractCleanMimeType(tipoEffettivo);
-                const fileVideo = new Blob(pezziVideoRef.current, { type: tipoPulito });
-                const registrazione = { blob: fileVideo, mimeType: tipoPulito, riepilogo: riepilogoRef.current };
+                const fileVideo = new Blob(sessione.pezzi, { type: tipoPulito });
+                const registrazione = { blob: fileVideo, mimeType: tipoPulito, riepilogo: sessione.riepilogo };
                 pendingRecordingRef.current = registrazione;
                 setPendingRecording(registrazione);
             }
 
-            pezziVideoRef.current = [];
-            flussoRef.current?.getTracks().forEach((track) => track.stop());
-            flussoRef.current = null;
+            sessione.pezzi = [];
+            sessione.flusso.getTracks().forEach((track) => track.stop());
+            if (sessioneRef.current === sessione) {
+                sessioneRef.current = null;
+                registratoreRef.current = null;
+            }
         };
-        registratoreRef.current.start(ENGINE.RECORDING_TIMESLICE_MS);
+        try {
+            registratore.start(ENGINE.RECORDING_TIMESLICE_MS);
+        } catch (error) {
+            sessioneRef.current = null;
+            registratoreRef.current = null;
+            flusso.getTracks().forEach((track) => track.stop());
+            console.error('Impossibile avviare la registrazione video:', error);
+            return false;
+        }
         setIsRecording(true);
+        return true;
     }, [canvasRef, setIsRecording]);
 
     const stopRecording = useCallback((salvaVideo = true, riepilogo = null) => {
-        if (registratoreRef.current && (registratoreRef.current.state === "recording" || registratoreRef.current.state === "paused")) {
-            vuoleSalvareRef.current = salvaVideo;
-            riepilogoRef.current = riepilogo;
-            if (registratoreRef.current.state === "recording") {
-                registratoreRef.current.requestData();
+        const sessione = sessioneRef.current;
+        if (sessione && (sessione.registratore.state === "recording" || sessione.registratore.state === "paused")) {
+            sessione.salva = salvaVideo;
+            sessione.riepilogo = riepilogo;
+            if (sessione.registratore.state === "recording") {
+                sessione.registratore.requestData();
             }
-            registratoreRef.current.stop();
+            sessione.registratore.stop();
             setIsRecording(false);
         }
     }, [setIsRecording]);
@@ -143,14 +163,17 @@ export function useVideoRecorder(canvasRef, setIsRecording) {
     }, []);
 
     // A recorder may outlive the component while its final chunk is pending.
-    useEffect(() => () => {
-        const registratore = registratoreRef.current;
-        if (registratore && registratore.state !== 'inactive') {
-            vuoleSalvareRef.current = false;
-            registratore.stop();
-        }
-        flussoRef.current?.getTracks().forEach((track) => track.stop());
-        flussoRef.current = null;
+    useEffect(() => {
+        montatoRef.current = true;
+        return () => {
+            montatoRef.current = false;
+            const sessione = sessioneRef.current;
+            if (sessione && sessione.registratore.state !== 'inactive') {
+                sessione.salva = false;
+                sessione.registratore.stop();
+            }
+            sessione?.flusso.getTracks().forEach((track) => track.stop());
+        };
     }, []);
 
     return {

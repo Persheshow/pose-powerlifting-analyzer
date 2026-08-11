@@ -68,6 +68,13 @@ function playRepBeep() {
   }
 }
 
+function playVideo(video) {
+  if (!video) return;
+  video.play().catch((error) => {
+    console.warn('Riproduzione video non avviata:', error);
+  });
+}
+
 export default function App() {
   const [esercizioScelto, setEsercizioScelto] = useState('SQUAT');
   const [allenamentoAvviato, setAllenamentoAvviato] = useState(false);
@@ -399,7 +406,7 @@ export default function App() {
                       onClick={() => {
                         if (videoRef.current) {
                           videoRef.current.currentTime = 0;
-                          videoRef.current.play();
+                          playVideo(videoRef.current);
                         }
                         resetConteggio();
                         setVideoTerminato(false);
@@ -424,7 +431,7 @@ export default function App() {
                     <button
                       onClick={() => {
                         if (inPausa) {
-                          if (videoRef.current) videoRef.current.play();
+                          playVideo(videoRef.current);
                           riprendiRegistrazione();
                           setInPausa(false);
                         } else {
@@ -451,6 +458,7 @@ export default function App() {
                 )
               ) : (
                 <button
+                  disabled={Boolean(pendingRecording)}
                   onClick={() => {
                     if (modalitaAcquisizione === 'live') {
                       if (durataContoAllaRovescia === 0) {
@@ -459,11 +467,10 @@ export default function App() {
                         setContoAllaRovescia(durataContoAllaRovescia);
                       }
                     } else {
-                      avviaRegistrazione();
-                      if (videoRef.current) videoRef.current.play();
+                      if (avviaRegistrazione()) playVideo(videoRef.current);
                     }
                   }}
-                  className="w-full py-4 text-sm font-bold tracking-widest rounded-none border border-[#002f6c] bg-white text-[#002f6c] transition-none hover:bg-[#002f6c] hover:text-white cursor-pointer"
+                  className={`w-full py-4 text-sm font-bold tracking-widest rounded-none border transition-none ${pendingRecording ? 'border-gray-300 bg-gray-200 text-gray-400 cursor-not-allowed' : 'border-[#002f6c] bg-white text-[#002f6c] hover:bg-[#002f6c] hover:text-white cursor-pointer'}`}
                 >
                   {modalitaAcquisizione === 'file' ? 'AVVIA ANALISI' : 'INIZIA ESERCIZIO'}
                 </button>
