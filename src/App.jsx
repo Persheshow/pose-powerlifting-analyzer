@@ -235,16 +235,16 @@ export default function App() {
               <h3 className="text-xs uppercase tracking-widest mb-1">0. Istruzioni</h3>
               <ul className="text-xs md:text-sm text-gray-700 space-y-2 list-none">
                 <li>
-                  <span className="text-xs tracking-widest mb-1 font-bold">i)</span> Inquadrare con un'angolazione sagittale, evitando i 90° se si utilizzano dischi che potrebbero coprire le articolazioni, e mantenendo una distanza in modo che l'intero corpo sia visibile.
+                  <span className="text-xs tracking-widest mb-1 font-bold">i)</span> Inquadrare con un'angolazione sagittale, evitando i 90° se si utilizzano dischi che potrebbero coprire le articolazioni. L'atleta deve essere completamente visibile  all'interno del frame.
                 </li>
                 <li>
-                  <span className="text-xs tracking-widest mb-1 font-bold">ii)</span> Assicurarsi che solo l'atleta sia presente nel video ed evitare il passaggio di altre persone. Evitare di riprendere Unrack e Rerack del bilanciere, in quanto potrebbero essere erroneamente conteggiati come ripetizioni.
+                  <span className="text-xs tracking-widest mb-1 font-bold">ii)</span> Assicurarsi che solo l'atleta sia presente nel video ed evitare il passaggio di altre persone. Evitare di riprendere Unrack e Rerack del bilanciere, in quanto potrebbero essere erroneamente registrati.
                 </li>
                 <li>
                   <span className="text-xs tracking-widest mb-1 font-bold">iii)</span> Non registrare in posti direttamente soleggiati, in controluce e/o con ombre marcate, e davanti a superfici specchianti, per evitare errori di tracciamento.
                 </li>
                 <li>
-                  <span className="text-xs tracking-widest mb-1 font-bold">iv)</span> Eseguire i movimenti in modo controllato. Ripetizioni troppo veloci potrebbero non essere registrate correttamente.
+                  <span className="text-xs tracking-widest mb-1 font-bold">iv)</span> Eseguire i movimenti in modo controllato. Ripetizioni troppo veloci potrebbero non essere conteggiate correttamente.
                 </li>
               </ul>
             </div>

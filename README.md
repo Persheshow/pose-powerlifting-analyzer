@@ -1,8 +1,7 @@
 # Powerlifting & Computer Vision
 
 Applicazione web per l'analisi cinematica nel browser e il riconoscimento automatico delle ripetizioni di squat, stacco da terra e pressa militare.
-
-I fotogrammi vengono elaborati localmente con MediaPipe Pose Landmarker e non sono inviati a servizi esterni.
+I frame vengono elaborati localmente con MediaPipe Pose Landmarker e non sono inviati a server esterni.
 
 ![Anteprima dell'applicazione](./docs/screenshot.png)
 
@@ -55,8 +54,7 @@ baseline:
 | Stacco da terra | `DeadliftDemo.mp4` | 3 | 0 |
 | Pressa militare | `OverheadPressDemo.mp4` | 4 | 0 |
 
-Una modifica non è considerata verificata se uno dei conteggi cambia senza
-un aggiornamento intenzionale e motivato della baseline.
+Una modifica non è considerata verificata se uno dei conteggi cambia.
 
 ## Utilizzo
 
@@ -65,7 +63,7 @@ un aggiornamento intenzionale e motivato della baseline.
 3. Avviare l'analisi e mantenere visibili le articolazioni richieste.
 4. Al termine, scaricare oppure ignorare la registrazione prodotta.
 
-Durante la sessione il punto articolare è rosso mentre il target geometrico non è raggiunto e verde quando lo è. Il colore costituisce un feedback geometrico: il conteggio definitivo dipende dalla macchina a stati dell'esercizio.
+Durante la sessione il punto articolare è rosso mentre il target geometrico non è raggiunto e verde quando lo è..
 
 ## Contesto accademico
 
