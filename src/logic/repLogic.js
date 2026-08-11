@@ -38,15 +38,18 @@ export function calculateAngle(a, b, c) {
  * Create the default state object used to track exercise execution and metrics.
  * @returns {Object} - Initial state for a new exercise session.
  */
-export function createInitialState() {
+export function createInitialState(timestampMs = null) {
+  // The clock is injected by usePose: media time for files, monotonic time for
+  // live capture. Null delays initialization until the first processed frame.
+  const initialTime = Number.isFinite(timestampMs) ? timestampMs : null;
   return {
     movementState: 'STANDING',
     smoothedPrimary: null,
     smoothedSecondary: null,
     lastAngle: 180,
     lastAngleHistory: [],
-    lastActiveTime: Date.now(),
-    startTime: Date.now(),
+    lastActiveTime: initialTime,
+    startTime: initialTime,
     occludedSince: null,
     metrics: {
       faults: new Set(),
@@ -193,8 +196,9 @@ function isSelectedArmVisible(landmarks, side) {
  * Helper function to check if the session has timed out due to inactivity.
  * @param {Object} stato - The current state of the exercise.
  */
-function checkTimeout(stato) {
-  const adesso = Date.now();
+function checkTimeout(stato, adesso) {
+  // Never read wall-clock time here: every temporal FSM decision must use the
+  // same clock supplied with the current frame.
   if (stato.movementState === 'STANDING') {
     stato.lastActiveTime = adesso;
     return;
@@ -241,12 +245,13 @@ function checkAscent(stato, angoloAttuale) {
  * @param {Object} stato - The current state of the exercise.
  * @returns {Object} - An object indicating if the landmarks are occluded and if a reset is needed.
  */
-function handleOcclusion(stato) {
-  if (!stato.occludedSince) {
-    stato.occludedSince = Date.now();
+function handleOcclusion(stato, adesso) {
+  // Occlusion duration follows the analysis timeline, not processing latency.
+  if (stato.occludedSince === null) {
+    stato.occludedSince = adesso;
     return { occluded: true, shouldReset: false };
   }
-  if (Date.now() - stato.occludedSince > ENGINE.OCCLUSION_RESET_MS && stato.movementState !== 'STANDING') {
+  if (adesso - stato.occludedSince > ENGINE.OCCLUSION_RESET_MS && stato.movementState !== 'STANDING') {
     return { occluded: true, shouldReset: true };
   }
   return { occluded: true, shouldReset: false };
@@ -259,12 +264,12 @@ function handleOcclusion(stato) {
  * @param {Array} indiciRichiesti - The indices of required landmarks to check.
  * @returns {Object} - An object indicating if the landmarks are visible and not occluded, and the resulting state if not.
  */
-function verificaVisibilitaEOcclusione(stato, lm, indiciRichiesti) {
+function verificaVisibilitaEOcclusione(stato, lm, indiciRichiesti, adesso) {
   const visibile = indiciRichiesti.every((i) => lm[i]?.visibility > ENGINE.VISIBILITY_THRESHOLD);
 
   if (!visibile) {
-    const { shouldReset } = handleOcclusion(stato);
-    const statoRisultante = shouldReset ? createInitialState() : stato;
+    const { shouldReset } = handleOcclusion(stato, adesso);
+    const statoRisultante = shouldReset ? createInitialState(adesso) : stato;
     return {
       ok: false,
       result: { state: statoRisultante, event: null, primaryAngle: null, secondaryAngle: null, isTarget: false },
@@ -272,7 +277,7 @@ function verificaVisibilitaEOcclusione(stato, lm, indiciRichiesti) {
   }
 
   stato.occludedSince = null;
-  checkTimeout(stato);
+  checkTimeout(stato, adesso);
   return { ok: true };
 }
 
@@ -283,12 +288,14 @@ function verificaVisibilitaEOcclusione(stato, lm, indiciRichiesti) {
  * @param {'LEFT'|'RIGHT'} lato - Side of the body used for landmark selection.
  * @returns {Object} - Updated state, event, angles, and target flag.
  */
-export function processSquat(stato, landmarks, lato) {
+export function processSquat(stato, landmarks, lato, timestampMs = performance.now()) {
   const cfg = ESERCIZI.SQUAT.thresholds;
   const { hip, knee, ankle } = ESERCIZI.SQUAT.landmarks[lato];
   const lm = landmarks;
-  const adesso = Date.now();
-  const guardia = verificaVisibilitaEOcclusione(stato, lm, [hip, knee, ankle]);
+  const adesso = timestampMs;
+  if (stato.startTime === null) stato.startTime = adesso;
+  if (stato.lastActiveTime === null) stato.lastActiveTime = adesso;
+  const guardia = verificaVisibilitaEOcclusione(stato, lm, [hip, knee, ankle], adesso);
   if (!guardia.ok) return guardia.result;
 
   const ginocchioGrezzo = calculateAngle(lm[hip], lm[knee], lm[ankle]);
@@ -380,12 +387,14 @@ export function processSquat(stato, landmarks, lato) {
  * @param {'LEFT'|'RIGHT'} lato - Side of the body used for landmark selection.
  * @returns {Object} - Updated state, event, angles, and target flag.
  */
-export function processDeadlift(stato, landmarks, lato) {
+export function processDeadlift(stato, landmarks, lato, timestampMs = performance.now()) {
   const cfg = ESERCIZI.DEADLIFT.thresholds;
   const { shoulder: idxSpalla, hip, knee, ankle } = ESERCIZI.DEADLIFT.landmarks[lato];
   const lm = landmarks;
-  const adesso = Date.now();
-  const guardia = verificaVisibilitaEOcclusione(stato, lm, [hip, knee]);
+  const adesso = timestampMs;
+  if (stato.startTime === null) stato.startTime = adesso;
+  if (stato.lastActiveTime === null) stato.lastActiveTime = adesso;
+  const guardia = verificaVisibilitaEOcclusione(stato, lm, [hip, knee], adesso);
   if (!guardia.ok) return guardia.result;
 
   const spallaLm = getShoulderLandmark(lm, idxSpalla, lm[hip]);
@@ -452,15 +461,17 @@ export function processDeadlift(stato, landmarks, lato) {
  * @param {'LEFT'|'RIGHT'} lato - Side of the body used for landmark selection.
  * @returns {Object} - Updated state, event, angles, and target flag.
  */
-export function processOverheadPress(stato, landmarks, lato) {
+export function processOverheadPress(stato, landmarks, lato, timestampMs = performance.now()) {
   const cfg = ESERCIZI.OVERHEAD_PRESS.thresholds;
   const lm = landmarks;
-  const adesso = Date.now();
+  const adesso = timestampMs;
+  if (stato.startTime === null) stato.startTime = adesso;
+  if (stato.lastActiveTime === null) stato.lastActiveTime = adesso;
   const m = stato.metrics;
 
   if (!isSelectedArmVisible(lm, lato)) {
-    const { shouldReset } = handleOcclusion(stato);
-    const statoRisultante = shouldReset ? createInitialState() : stato;
+    const { shouldReset } = handleOcclusion(stato, adesso);
+    const statoRisultante = shouldReset ? createInitialState(adesso) : stato;
     return {
       state: statoRisultante,
       event: null,
@@ -471,7 +482,7 @@ export function processOverheadPress(stato, landmarks, lato) {
   }
 
   const { shoulder: idxSpalla, elbow: idxGomito, wrist, hip } = ESERCIZI.OVERHEAD_PRESS.landmarks[lato];
-  const guardia = verificaVisibilitaEOcclusione(stato, lm, [idxSpalla, idxGomito, wrist]);
+  const guardia = verificaVisibilitaEOcclusione(stato, lm, [idxSpalla, idxGomito, wrist], adesso);
   if (!guardia.ok) return guardia.result;
 
   const gomitoGrezzo = calculateAngle(lm[idxSpalla], lm[idxGomito], lm[wrist]);
@@ -581,9 +592,9 @@ export function processOverheadPress(stato, landmarks, lato) {
  * @param {'LEFT'|'RIGHT'} lato - Side of the body to evaluate.
  * @returns {Object} - Updated state, event, and angle values.
  */
-export function processFrame(esercizio, stato, landmarks, lato) {
-  if (esercizio === 'SQUAT') return processSquat(stato, landmarks, lato);
-  if (esercizio === 'DEADLIFT') return processDeadlift(stato, landmarks, lato);
-  if (esercizio === 'OVERHEAD_PRESS') return processOverheadPress(stato, landmarks, lato);
+export function processFrame(esercizio, stato, landmarks, lato, timestampMs = performance.now()) {
+  if (esercizio === 'SQUAT') return processSquat(stato, landmarks, lato, timestampMs);
+  if (esercizio === 'DEADLIFT') return processDeadlift(stato, landmarks, lato, timestampMs);
+  if (esercizio === 'OVERHEAD_PRESS') return processOverheadPress(stato, landmarks, lato, timestampMs);
   return { state: stato, event: null };
 }

@@ -1,9 +1,27 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { PoseLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
 import { processFrame, createInitialState } from '../logic/repLogic';
 import { drawSkeleton, drawHUD } from '../utils/canvasRenderer';
 import { determinaLatoInquadrato, selectTrackedPose, smoothLandmarksCoordinates } from '../utils/poseUtils';
 import { ENGINE } from '../config/exercises';
+
+async function createPoseLandmarker() {
+  // A new instance also creates a new MediaPipe temporal tracker. This is
+  // required when replaying a file so results cannot inherit the previous run.
+  const vision = await FilesetResolver.forVisionTasks('/wasm');
+  return PoseLandmarker.createFromOptions(vision, {
+    baseOptions: {
+      modelAssetPath: '/models/pose_landmarker_lite.task',
+      delegate: 'GPU'
+    },
+    runningMode: 'VIDEO',
+    numPoses: 2,
+    smoothLandmarks: true,
+    minPoseDetectionConfidence: 0.6,
+    minPosePresenceConfidence: 0.6,
+    minTrackingConfidence: 0.65
+  });
+}
 
 /**
  * Custom React hook that initializes MediaPipe pose tracking and updates exercise state.
@@ -18,6 +36,8 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const modelloRef = useRef(null);
+  const modelGenerationRef = useRef(0);
+  const componenteMontatoRef = useRef(false);
   const frameIdRef = useRef(null);
   const statoRepRef = useRef(createInitialState());
   const angoliPrecRef = useRef({ primary: null, secondary: null });
@@ -45,16 +65,22 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
   const [faults, setFaults] = useState([]);
   const [angles, setAngles] = useState({ primary: null, secondary: null });
 
-  // Reset the internal state and UI counters whenever the exercise, active status, camera side, or video URL changes.
-  useEffect(() => {
+  // Restore every stateful layer involved in an analysis, including filters
+  // and subject continuity. Resetting only the counters is not sufficient.
+  const resetTrackingState = useCallback(() => {
     statoRepRef.current = createInitialState();
     angoliPrecRef.current = { primary: null, secondary: null };
     framePersiRef.current = 0;
+    ultimoTempoVideoRef.current = -1;
     smoothedLandmarksRef.current = null;
     ultimoPuntiRef.current = null;
+    ultimoLatoRef.current = 'LEFT';
     latoBloccatoRef.current = null;
     soggettoTracciatoRef.current = null;
     ultimoBersaglioRef.current = false;
+    isProcessingRef.current = false;
+    ultimoAggiornamentoUI.current = 0;
+    ultimoTimestampInferenza.current = 0;
     contatoreValideRef.current = 0;
     contatoreNonValideRef.current = 0;
     messaggioHudRef.current = null;
@@ -63,67 +89,95 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
     setFaults([]);
     setAngles({ primary: null, secondary: null });
     setIsTrackingLost(false);
-  }, [esercizio, attivo, latoCamera, videoUrl]);
+  }, []);
+
+  // Build the replacement before closing the active instance. The generation
+  // token prevents a slower, obsolete async creation from becoming active.
+  const replacePoseLandmarker = useCallback(async () => {
+    const generation = ++modelGenerationRef.current;
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const nuovoModello = await createPoseLandmarker();
+      if (!componenteMontatoRef.current || generation !== modelGenerationRef.current) {
+        nuovoModello.close();
+        return false;
+      }
+
+      const vecchioModello = modelloRef.current;
+      modelloRef.current = nuovoModello;
+      vecchioModello?.close();
+      setIsLoading(false);
+      return true;
+    } catch (err) {
+      if (componenteMontatoRef.current && generation === modelGenerationRef.current) {
+        setError('Errore caricamento modello: ' + err.message);
+        setIsLoading(false);
+      }
+      return false;
+    }
+  }, []);
+
+  // Reset the internal state and UI counters whenever the exercise, active status, camera side, or video URL changes.
+  useEffect(() => {
+    resetTrackingState();
+  }, [esercizio, attivo, latoCamera, videoUrl, resetTrackingState]);
 
   // Update the recording reference whenever the recording status changes, and reset the state if recording starts.
   useEffect(() => {
-    registrazioneRef.current = registrazioneAttiva;
-    if (registrazioneAttiva) {
-      reset();
-      latoBloccatoRef.current = ultimoPuntiRef.current ? ultimoLatoRef.current : null;
-    } else {
+    let annullato = false;
+
+    if (!registrazioneAttiva) {
+      registrazioneRef.current = false;
       latoBloccatoRef.current = null;
+      return;
     }
-  }, [registrazioneAttiva]);
+
+    if (!videoUrl) {
+      // Live capture keeps the current landmarker and only starts a fresh FSM.
+      resetTrackingState();
+      registrazioneRef.current = true;
+      return;
+    }
+
+    registrazioneRef.current = false;
+    const video = videoRef.current;
+    // Do not let the file advance while its fresh tracker is being created.
+    video?.pause();
+    if (video && video.readyState >= 1) video.currentTime = 0.001;
+    resetTrackingState();
+
+    async function startFreshVideoAnalysis() {
+      const modelloPronto = await replacePoseLandmarker();
+      if (annullato || !modelloPronto) return;
+      // Clear once more after async initialization so no frame rendered while
+      // loading can contaminate the new analysis.
+      resetTrackingState();
+      registrazioneRef.current = true;
+      await videoRef.current?.play();
+    }
+
+    startFreshVideoAnalysis().catch((err) => {
+      if (!annullato) setError('Errore avvio analisi video: ' + err.message);
+    });
+
+    return () => { annullato = true; };
+  }, [registrazioneAttiva, videoUrl, replacePoseLandmarker, resetTrackingState]);
 
   // Load the MediaPipe PoseLandmarker model asynchronously when the component mounts, and clean up on unmount.
   useEffect(() => {
-    let componenteMontato = true;
-
-    async function caricaModello() {
-      try {
-        const vision = await FilesetResolver.forVisionTasks('/wasm');
-        const landmarker = await PoseLandmarker.createFromOptions(vision, {
-          baseOptions: {
-            modelAssetPath: '/models/pose_landmarker_lite.task',
-            delegate: 'GPU'
-          },
-          runningMode: 'VIDEO',
-          numPoses: 2,
-          smoothLandmarks: true,
-          minPoseDetectionConfidence: 0.6,
-          minPosePresenceConfidence: 0.6,
-          minTrackingConfidence: 0.65
-        });
-
-        try {
-          const dummyCanvas = document.createElement('canvas');
-          dummyCanvas.width = 10;
-          dummyCanvas.height = 10;
-          landmarker.detectForVideo(dummyCanvas, performance.now());
-        } catch (e) {
-          console.warn("Warm-up non riuscito, ma modello caricato", e);
-        }
-
-        if (componenteMontato) {
-          modelloRef.current = landmarker;
-          setIsLoading(false);
-        } else {
-          landmarker.close();
-        }
-      } catch (err) {
-        if (componenteMontato) setError('Errore caricamento modello: ' + err.message);
-      }
-    }
-    caricaModello();
+    componenteMontatoRef.current = true;
+    replacePoseLandmarker();
     return () => {
-      componenteMontato = false;
+      componenteMontatoRef.current = false;
+      modelGenerationRef.current += 1;
       if (modelloRef.current) {
         modelloRef.current.close();
         modelloRef.current = null;
       }
     };
-  }, []);
+  }, [replacePoseLandmarker]);
 
   // Start the camera or load the video when the component mounts or when the active status, camera side, or video URL changes.
   useEffect(() => {
@@ -229,9 +283,13 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
           ultimoTempoVideoRef.current = video.currentTime;
 
           try {
-            // MediaPipe VIDEO mode requires monotonically increasing timestamps.
-            const now = performance.now();
-            const risultati = landmarker.detectForVideo(video, now);
+            // All FSM durations for a file are measured on the media timeline,
+            // so browser/GPU speed cannot alter grace periods or cooldowns.
+            // Live capture instead uses the browser's monotonic real-time clock.
+            const analysisTimestampMs = videoUrl
+              ? video.currentTime * 1000
+              : performance.now();
+            const risultati = landmarker.detectForVideo(video, analysisTimestampMs);
 
             const posaPrecedente = registrazioneRef.current ? soggettoTracciatoRef.current : null;
             const puntiGrezzi = selectTrackedPose(risultati.landmarks, posaPrecedente);
@@ -260,7 +318,13 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
               ultimoLatoRef.current = latoRilevato;
 
               // Each exercise validates its own required landmarks and occlusion fallbacks.
-              const esito = processFrame(esercizio, statoRepRef.current, puntiStabilizzati, latoRilevato);
+              const esito = processFrame(
+                esercizio,
+                statoRepRef.current,
+                puntiStabilizzati,
+                latoRilevato,
+                analysisTimestampMs
+              );
 
               // Keep the displayed angles responsive while the user adjusts position.
               if (timestamp - ultimoAggiornamentoUI.current > 100) {
@@ -335,16 +399,24 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
    * Reset the current pose tracking logical state (without clearing visual skeleton).
    */
   function reset() {
-    statoRepRef.current = createInitialState();
-    contatoreValideRef.current = 0;
-    contatoreNonValideRef.current = 0;
-    messaggioHudRef.current = null;
-    ultimoBersaglioRef.current = false;
+    resetTrackingState();
 
-    setValidReps(0);
-    setNoReps(0);
-    setFaults([]);
-    // Preserve the latest landmarks so the skeleton remains visible when recording starts.
+    // A replay must not inherit MediaPipe's temporal tracker from the previous pass.
+    if (videoUrl && registrazioneRef.current) {
+      const video = videoRef.current;
+      registrazioneRef.current = false;
+      video?.pause();
+      if (video && video.readyState >= 1) video.currentTime = 0.001;
+
+      replacePoseLandmarker().then((modelloPronto) => {
+        if (!modelloPronto) return;
+        resetTrackingState();
+        registrazioneRef.current = true;
+        videoRef.current?.play().catch((err) => {
+          setError('Errore riavvio analisi video: ' + err.message);
+        });
+      });
+    }
   }
 
   return { videoRef, canvasRef, isLoading, isTrackingLost, error, validReps, noReps, faults, angles, reset };
