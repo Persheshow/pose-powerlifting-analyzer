@@ -33,7 +33,6 @@ export function createInitialState(timestampMs = null) {
     lastAngleHistory: [],
     lastActiveTime: initialTime,
     lastObservedMovementState: 'STANDING',
-    startTime: initialTime,
     occludedSince: null,
     metrics: {
       deepEnough: false,
@@ -41,96 +40,8 @@ export function createInitialState(timestampMs = null) {
       lowestKneeAngle: 180,
       lowestElbowAngle: 180,
       targetReached: false,
-      squatSetActive: false,
-      // Squat trajectory metrics reject setup and walk-away motion around the rack.
-      squatStandingGeometry: null,
-      squatStartGeometry: null,
-      squatMaxHipDescent: 0,
-      squatMaxAnkleTravel: 0,
-      // Press trajectory metrics confirm that elbow lockout follows a real wrist ascent.
-      pressLowestWristElevation: null,
-      pressLockoutCandidateSince: null,
     },
   };
-}
-
-/**
- * Returns normalized reference points used to distinguish a squat from rack motion.
- */
-function getSquatGeometry(landmarks, hipIndex, ankleIndex) {
-  const hip = landmarks[hipIndex];
-  const ankle = landmarks[ankleIndex];
-  if (!hip || !ankle ||
-    [hip, ankle].some(point => point.visibility <= ENGINE.VISIBILITY_THRESHOLD)) return null;
-
-  const legLength = Math.hypot(hip.x - ankle.x, hip.y - ankle.y);
-  if (legLength <= 0.08) return null;
-
-  return {
-    hip: { x: hip.x, y: hip.y },
-    ankle: { x: ankle.x, y: ankle.y },
-    legLength,
-  };
-}
-
-/**
- * Updates the largest hip descent and ankle displacement observed in the attempt.
- */
-function updateSquatTrajectory(metrics, geometry) {
-  const start = metrics.squatStartGeometry;
-  if (!start || !geometry) return;
-
-  const hipDescent = (geometry.hip.y - start.hip.y) / start.legLength;
-  const ankleTravel = Math.hypot(
-    geometry.ankle.x - start.ankle.x,
-    geometry.ankle.y - start.ankle.y
-  ) / start.legLength;
-
-  metrics.squatMaxHipDescent = Math.max(metrics.squatMaxHipDescent, hipDescent);
-  metrics.squatMaxAnkleTravel = Math.max(metrics.squatMaxAnkleTravel, ankleTravel);
-}
-
-/**
- * Clears the current squat attempt without changing the completed repetition count.
- */
-function resetSquatAttempt(stato) {
-  stato.movementState = 'STANDING';
-  stato.lastAngleHistory = [];
-  stato.metrics.deepEnough = false;
-  stato.metrics.lowestKneeAngle = 180;
-  stato.metrics.squatStartGeometry = null;
-  stato.metrics.squatMaxHipDescent = 0;
-  stato.metrics.squatMaxAnkleTravel = 0;
-}
-
-/**
- * Returns wrist position relative to torso length for press trajectory validation.
- */
-function getPressWristGeometry(landmarks, shoulderIndex, wristIndex, hipIndex) {
-  const shoulder = landmarks[shoulderIndex];
-  const wrist = landmarks[wristIndex];
-  const hip = landmarks[hipIndex];
-  if (!shoulder || !wrist || !hip ||
-    hip.visibility <= ENGINE.VISIBILITY_THRESHOLD) return null;
-
-  const torsoLength = Math.hypot(shoulder.x - hip.x, shoulder.y - hip.y);
-  if (torsoLength <= 0.05) return null;
-
-  return {
-    elevation: (shoulder.y - wrist.y) / torsoLength,
-    horizontalOffset: Math.abs(wrist.x - shoulder.x) / torsoLength,
-  };
-}
-
-/**
- * Clears the current press attempt without changing the completed repetition count.
- */
-function resetPressAttempt(stato) {
-  stato.movementState = 'STANDING';
-  stato.lastAngleHistory = [];
-  stato.metrics.lowestElbowAngle = 180;
-  stato.metrics.pressLowestWristElevation = null;
-  stato.metrics.pressLockoutCandidateSince = null;
 }
 
 // Deadlift tolerates a hidden near shoulder; the press deliberately does not.
@@ -182,13 +93,6 @@ function checkTimeout(stato, adesso) {
     stato.metrics.targetReached = false;
     stato.metrics.lowestKneeAngle = 180;
     stato.metrics.lowestElbowAngle = 180;
-    stato.metrics.squatSetActive = false;
-    stato.metrics.squatStandingGeometry = null;
-    stato.metrics.squatStartGeometry = null;
-    stato.metrics.squatMaxHipDescent = 0;
-    stato.metrics.squatMaxAnkleTravel = 0;
-    stato.metrics.pressLowestWristElevation = null;
-    stato.metrics.pressLockoutCandidateSince = null;
     stato.lastAngleHistory = [];
     stato.lastActiveTime = adesso;
   }
@@ -246,7 +150,6 @@ export function processSquat(stato, landmarks, lato, timestampMs = performance.n
   const { hip, knee, ankle } = ESERCIZI.SQUAT.landmarks[lato];
   const lm = landmarks;
   const adesso = timestampMs;
-  if (stato.startTime === null) stato.startTime = adesso;
   if (stato.lastActiveTime === null) stato.lastActiveTime = adesso;
   const guardia = verificaVisibilitaEOcclusione(stato, lm, [hip, knee, ankle], adesso);
   if (!guardia.ok) return guardia.result;
@@ -255,13 +158,7 @@ export function processSquat(stato, landmarks, lato, timestampMs = performance.n
   stato.smoothedPrimary = smoothAngle(stato.smoothedPrimary, ginocchioGrezzo);
   const angoloGinocchio = stato.smoothedPrimary;
   const m = stato.metrics;
-  const geometriaSquat = getSquatGeometry(lm, hip, ankle);
   let evento = null;
-
-  if (adesso - stato.startTime < ENGINE.SETUP_GRACE_MS) {
-    stato.lastAngle = angoloGinocchio;
-    return { state: stato, event: null, primaryAngle: angoloGinocchio, secondaryAngle: stato.smoothedSecondary, isTarget: false };
-  }
 
   if (adesso < m.cooldownUntil) {
     stato.lastAngle = angoloGinocchio;
@@ -275,46 +172,26 @@ export function processSquat(stato, landmarks, lato, timestampMs = performance.n
   };
 
   if (stato.movementState === 'STANDING') {
-    // Keep the latest standing pose as the trajectory baseline for this attempt.
-    if (geometriaSquat && angoloGinocchio >= cfg.topKnee - 5) {
-      m.squatStandingGeometry = geometriaSquat;
-    }
-    if (geometriaSquat && angoloGinocchio < cfg.topKnee - 20) {
+    if (angoloGinocchio < cfg.topKnee - 20) {
       stato.movementState = 'DESCENDING';
       m.deepEnough = false;
       m.lowestKneeAngle = angoloGinocchio;
-      m.squatStartGeometry = m.squatStandingGeometry ?? geometriaSquat;
-      m.squatMaxHipDescent = 0;
-      m.squatMaxAnkleTravel = 0;
       stato.lastAngleHistory = [];
     }
   }
   else if (stato.movementState === 'DESCENDING') {
-    updateSquatTrajectory(m, geometriaSquat);
     controllaProfondita();
     if (checkAscent(stato, angoloGinocchio)) stato.movementState = 'ASCENDING';
   }
   else if (stato.movementState === 'ASCENDING') {
-    updateSquatTrajectory(m, geometriaSquat);
     controllaProfondita();
 
     if (angoloGinocchio > cfg.topKnee) {
-      // A stable setup starts the set; later deep reps remain valid despite small foot shifts.
-      const appoggioStabile = m.squatMaxAnkleTravel <= cfg.maxAnkleTravelLeg;
-      const discesaConfermata = m.squatMaxHipDescent >= cfg.minHipDescentLeg;
-      const ripetizioneProfondaInSerie = m.squatSetActive && m.deepEnough;
-      const traiettoriaSquatValida = ripetizioneProfondaInSerie ||
-        (appoggioStabile && (m.squatSetActive || discesaConfermata));
-
-      if (!traiettoriaSquatValida) {
-        if (!appoggioStabile) m.squatSetActive = false;
-        resetSquatAttempt(stato);
-        stato.lastAngle = angoloGinocchio;
-        return { state: stato, event: null, primaryAngle: angoloGinocchio, secondaryAngle: stato.smoothedSecondary, isTarget: false };
-      }
-
       if (m.lowestKneeAngle > cfg.minAttemptKnee) {
-        resetSquatAttempt(stato);
+        stato.movementState = 'STANDING';
+        m.deepEnough = false;
+        m.lowestKneeAngle = 180;
+        stato.lastAngleHistory = [];
         return { state: stato, event: null, primaryAngle: angoloGinocchio, secondaryAngle: stato.smoothedSecondary, isTarget: false };
       }
 
@@ -322,8 +199,10 @@ export function processSquat(stato, landmarks, lato, timestampMs = performance.n
         ? { type: 'VALID_REP', faults: [] }
         : { type: 'NO_REP', faults: ['Mancato superamento del parallelo'] };
 
-      m.squatSetActive = true;
-      resetSquatAttempt(stato);
+      stato.movementState = 'STANDING';
+      m.deepEnough = false;
+      m.lowestKneeAngle = 180;
+      stato.lastAngleHistory = [];
       m.cooldownUntil = adesso + cfg.cooldownMs;
     }
   }
@@ -344,7 +223,6 @@ export function processDeadlift(stato, landmarks, lato, timestampMs = performanc
   const { shoulder: idxSpalla, hip, knee, ankle } = ESERCIZI.DEADLIFT.landmarks[lato];
   const lm = landmarks;
   const adesso = timestampMs;
-  if (stato.startTime === null) stato.startTime = adesso;
   if (stato.lastActiveTime === null) stato.lastActiveTime = adesso;
   const guardia = verificaVisibilitaEOcclusione(stato, lm, [hip, knee, ankle], adesso);
   if (!guardia.ok) return guardia.result;
@@ -360,17 +238,11 @@ export function processDeadlift(stato, landmarks, lato, timestampMs = performanc
   const angoloGinocchio = stato.smoothedSecondary;
   const m = stato.metrics;
 
-  const lockoutGinocchio = (cfg.erectKnee || 165) - 25;
   const lockoutAnca = (cfg.erectHip || 165) - 20;
 
-  const eretto = angoloGinocchio > lockoutGinocchio && angoloAnca > lockoutAnca;
+  const eretto = angoloAnca > lockoutAnca;
 
   let evento = null;
-
-  if (adesso - stato.startTime < ENGINE.SETUP_GRACE_MS) {
-    stato.lastAngle = angoloAnca;
-    return { state: stato, event: null, primaryAngle: angoloAnca, secondaryAngle: angoloGinocchio, isTarget: m.targetReached || eretto };
-  }
 
   if (adesso < m.cooldownUntil) {
     stato.lastAngle = angoloAnca;
@@ -414,7 +286,6 @@ export function processOverheadPress(stato, landmarks, lato, timestampMs = perfo
   const cfg = ESERCIZI.OVERHEAD_PRESS.thresholds;
   const lm = landmarks;
   const adesso = timestampMs;
-  if (stato.startTime === null) stato.startTime = adesso;
   if (stato.lastActiveTime === null) stato.lastActiveTime = adesso;
   const m = stato.metrics;
 
@@ -444,13 +315,7 @@ export function processOverheadPress(stato, landmarks, lato, timestampMs = perfo
     stato.smoothedSecondary = smoothAngle(stato.smoothedSecondary, troncoGrezzo);
   }
   const angoloTronco = stato.smoothedSecondary;
-  const geometriaPolso = getPressWristGeometry(lm, idxSpalla, wrist, hip);
   let evento = null;
-
-  if (adesso - stato.startTime < ENGINE.SETUP_GRACE_MS) {
-    stato.lastAngle = angoloGomito;
-    return { state: stato, event: null, primaryAngle: angoloGomito, secondaryAngle: angoloTronco, isTarget: angoloGomito > cfg.topElbow };
-  }
 
   if (adesso < m.cooldownUntil) {
     stato.lastAngle = angoloGomito;
@@ -463,68 +328,33 @@ export function processOverheadPress(stato, landmarks, lato, timestampMs = perfo
     if (angoloGomito < cfg.bottomElbow) {
       stato.movementState = 'DESCENDING';
       m.lowestElbowAngle = angoloGomito;
-      m.pressLowestWristElevation = geometriaPolso?.elevation ?? null;
-      m.pressLockoutCandidateSince = null;
       stato.lastAngleHistory = [];
       m.targetReached = false;
     }
   }
   else if (stato.movementState === 'DESCENDING') {
-    if (geometriaPolso) {
-      m.pressLowestWristElevation = Math.min(
-        m.pressLowestWristElevation ?? geometriaPolso.elevation,
-        geometriaPolso.elevation
-      );
-    }
     if (checkAscent(stato, angoloGomito)) {
       stato.movementState = 'ASCENDING';
     }
   }
   else if (stato.movementState === 'ASCENDING') {
-    if (geometriaPolso) {
-      m.pressLowestWristElevation = Math.min(
-        m.pressLowestWristElevation ?? geometriaPolso.elevation,
-        geometriaPolso.elevation
-      );
-    }
-    if (m.pressLockoutCandidateSince !== null && angoloGomito < cfg.bottomElbow - 10) {
-      // The arm descended again before wrist trajectory confirmed the lockout.
-      resetPressAttempt(stato);
-      stato.lastAngle = angoloGomito;
-      return { state: stato, event: null, primaryAngle: angoloGomito, secondaryAngle: angoloTronco, isTarget: false };
-    }
-
     if (angoloGomito > cfg.topElbow) {
 
       if (m.lowestElbowAngle > cfg.minAttemptElbow) {
-        resetPressAttempt(stato);
+        stato.movementState = 'STANDING';
+        m.lowestElbowAngle = 180;
+        stato.lastAngleHistory = [];
         stato.lastAngle = angoloGomito;
         return { state: stato, event: null, primaryAngle: angoloGomito, secondaryAngle: angoloTronco, isTarget: false };
       }
 
-      const escursionePolso = geometriaPolso && m.pressLowestWristElevation !== null
-        ? geometriaPolso.elevation - m.pressLowestWristElevation
-        : 0;
-      const lockoutPolsoValido = geometriaPolso &&
-        escursionePolso >= cfg.minWristTravelTorso &&
-        geometriaPolso.elevation >= cfg.minLockoutWristElevationTorso &&
-        geometriaPolso.horizontalOffset <= cfg.maxLockoutWristHorizontalOffsetTorso;
+      evento = { type: 'VALID_REP', faults: [] };
 
-      if (!lockoutPolsoValido) {
-        // Hold the elbow lockout briefly while waiting for the wrist to reach its valid position.
-        if (m.pressLockoutCandidateSince === null) m.pressLockoutCandidateSince = adesso;
-        if (adesso - m.pressLockoutCandidateSince >= cfg.lockoutConfirmationMs) {
-          resetPressAttempt(stato);
-          stato.lastAngle = angoloGomito;
-          return { state: stato, event: null, primaryAngle: angoloGomito, secondaryAngle: angoloTronco, isTarget: false };
-        }
-      } else {
-        evento = { type: 'VALID_REP', faults: [] };
-
-        resetPressAttempt(stato);
-        m.cooldownUntil = adesso + cfg.cooldownMs;
-        m.targetReached = true;
-      }
+      stato.movementState = 'STANDING';
+      m.lowestElbowAngle = 180;
+      stato.lastAngleHistory = [];
+      m.cooldownUntil = adesso + cfg.cooldownMs;
+      m.targetReached = true;
     }
   }
 

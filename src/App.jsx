@@ -93,6 +93,7 @@ export default function App() {
   const videoUrlRef = useRef(null);
   const arrestoAutomaticoRef = useRef(null);
   const conteggiRef = useRef({ valide: 0, nonValide: 0 });
+  const wakeLockRef = useRef(null);
 
   const handleFileChange = (e) => {
     const file = e.target.files[0];
@@ -134,6 +135,58 @@ export default function App() {
     if (videoUrlRef.current) URL.revokeObjectURL(videoUrlRef.current);
     if (arrestoAutomaticoRef.current) clearTimeout(arrestoAutomaticoRef.current);
   }, []);
+
+  useEffect(() => {
+    if (!allenamentoAvviato || typeof navigator === 'undefined' || !navigator.wakeLock) return;
+
+    let annullato = false;
+
+    const rilasciaWakeLock = () => {
+      const wakeLock = wakeLockRef.current;
+      wakeLockRef.current = null;
+      if (wakeLock && !wakeLock.released) {
+        wakeLock.release().catch((error) => {
+          console.warn('Impossibile rilasciare il blocco schermo:', error);
+        });
+      }
+    };
+
+    const richiediWakeLock = async () => {
+      if (document.visibilityState !== 'visible' || (wakeLockRef.current && !wakeLockRef.current.released)) return;
+
+      try {
+        const wakeLock = await navigator.wakeLock.request('screen');
+        if (annullato || document.visibilityState !== 'visible') {
+          await wakeLock.release();
+          return;
+        }
+
+        wakeLockRef.current = wakeLock;
+        wakeLock.addEventListener('release', () => {
+          if (wakeLockRef.current === wakeLock) wakeLockRef.current = null;
+        });
+      } catch (error) {
+        console.warn('Blocco schermo non disponibile:', error);
+      }
+    };
+
+    const gestisciVisibilita = () => {
+      if (document.visibilityState === 'visible') {
+        richiediWakeLock();
+      } else {
+        rilasciaWakeLock();
+      }
+    };
+
+    richiediWakeLock();
+    document.addEventListener('visibilitychange', gestisciVisibilita);
+
+    return () => {
+      annullato = true;
+      document.removeEventListener('visibilitychange', gestisciVisibilita);
+      rilasciaWakeLock();
+    };
+  }, [allenamentoAvviato]);
 
   useEffect(() => {
     if (ripetizioniValide > 0) playRepBeep();
@@ -245,6 +298,9 @@ export default function App() {
                 </li>
                 <li>
                   <span className="text-xs tracking-widest mb-1 font-bold">iv)</span> Eseguire i movimenti in modo controllato. Ripetizioni troppo veloci potrebbero non essere conteggiate correttamente.
+                </li>
+                <li>
+                  <span className="text-xs tracking-widest mb-1 font-bold">v)</span> Utilizzare Google Chrome (su Android/PC) o Safari (su iOS). Firefox potrebbe presentare problemi di compatibilità. Per i video caricati, evitare risoluzioni estreme (né troppo alte né troppo basse) per garantire un'analisi fluida e un tracciamento preciso.
                 </li>
               </ul>
             </div>

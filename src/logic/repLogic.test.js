@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createInitialState, processDeadlift, processSquat } from './repLogic.js';
+import { createInitialState, processDeadlift, processOverheadPress, processSquat } from './repLogic.js';
 
 function landmark(x, y, visibility = 1) {
   return { x, y, z: 0, visibility };
@@ -39,5 +39,33 @@ test('an unchanged phase is reset after the inactivity timeout', () => {
   state.movementState = 'DESCENDING';
   state.lastObservedMovementState = 'DESCENDING';
   const result = processSquat(state, leftSidePose(), 'LEFT', 6000);
+  assert.equal(result.state.movementState, 'STANDING');
+});
+
+test('a deep squat is counted without a separate ankle-trajectory filter', () => {
+  const state = createInitialState(0);
+  state.movementState = 'ASCENDING';
+  state.smoothedPrimary = 170;
+  state.metrics.deepEnough = true;
+  state.metrics.lowestKneeAngle = 80;
+
+  const result = processSquat(state, leftSidePose(), 'LEFT', 1500);
+  assert.equal(result.event?.type, 'VALID_REP');
+  assert.equal(result.state.movementState, 'STANDING');
+});
+
+test('overhead press counts full elbow extension without a wrist-trajectory filter', () => {
+  const pose = leftSidePose();
+  pose[11] = landmark(0.4, 0.4);
+  pose[13] = landmark(0.4, 0.3);
+  pose[15] = landmark(0.4, 0.2);
+
+  const state = createInitialState(0);
+  state.movementState = 'ASCENDING';
+  state.smoothedPrimary = 150;
+  state.metrics.lowestElbowAngle = 90;
+
+  const result = processOverheadPress(state, pose, 'LEFT', 1500);
+  assert.equal(result.event?.type, 'VALID_REP');
   assert.equal(result.state.movementState, 'STANDING');
 });
