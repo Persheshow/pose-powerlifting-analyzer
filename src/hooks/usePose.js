@@ -39,7 +39,7 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
   const componenteMontatoRef = useRef(false);
   const frameIdRef = useRef(null);
   const statoRepRef = useRef(createInitialState());
-  const angoliPrecRef = useRef({ primary: null, secondary: null });
+  const angoloPrecRef = useRef(null);
   const framePersiRef = useRef(0);
   const ultimoTempoVideoRef = useRef(-1);
   const smoothedLandmarksRef = useRef(null);
@@ -66,7 +66,7 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
   // and subject continuity. Resetting only the counters is not sufficient.
   const resetTrackingState = useCallback(() => {
     statoRepRef.current = createInitialState();
-    angoliPrecRef.current = { primary: null, secondary: null };
+    angoloPrecRef.current = null;
     framePersiRef.current = 0;
     ultimoTempoVideoRef.current = -1;
     smoothedLandmarksRef.current = null;
@@ -245,7 +245,7 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
         ultimoPuntiRef.current = null;
         smoothedLandmarksRef.current = null;
         soggettoTracciatoRef.current = null;
-        angoliPrecRef.current = { primary: null, secondary: null };
+        angoloPrecRef.current = null;
         setIsTrackingLost(true);
       }
     }
@@ -328,8 +328,8 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
               );
 
               if (timestamp - ultimoAggiornamentoUI.current > 100) {
-                if (Math.abs((esito.primaryAngle ?? 0) - (angoliPrecRef.current.primary ?? 0)) > 1) {
-                  angoliPrecRef.current = { primary: esito.primaryAngle, secondary: esito.secondaryAngle };
+                if (Math.abs((esito.primaryAngle ?? 0) - (angoloPrecRef.current ?? 0)) > 1) {
+                  angoloPrecRef.current = esito.primaryAngle;
                   ultimoAggiornamentoUI.current = timestamp;
                 }
               }
@@ -381,7 +381,7 @@ export function usePose(esercizio, attivo, latoCamera, registrazioneAttiva, vide
           contatoreValideRef.current,
           messaggioHudRef.current,
           isTrackingLost,
-          angoliPrecRef.current.primary
+          angoloPrecRef.current
         );
       }
       frameIdRef.current = requestAnimationFrame(ciclo);

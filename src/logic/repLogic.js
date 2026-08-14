@@ -28,8 +28,6 @@ export function createInitialState(timestampMs = null) {
   return {
     movementState: 'STANDING',
     smoothedPrimary: null,
-    smoothedSecondary: null,
-    lastAngle: 180,
     lastAngleHistory: [],
     lastActiveTime: initialTime,
     lastObservedMovementState: 'STANDING',
@@ -113,12 +111,12 @@ function handleOcclusion(stato, adesso) {
   // Occlusion duration follows the analysis timeline, not processing latency.
   if (stato.occludedSince === null) {
     stato.occludedSince = adesso;
-    return { occluded: true, shouldReset: false };
+    return { shouldReset: false };
   }
   if (adesso - stato.occludedSince > ENGINE.OCCLUSION_RESET_MS && stato.movementState !== 'STANDING') {
-    return { occluded: true, shouldReset: true };
+    return { shouldReset: true };
   }
-  return { occluded: true, shouldReset: false };
+  return { shouldReset: false };
 }
 
 function verificaVisibilitaEOcclusione(stato, lm, indiciRichiesti, adesso) {
@@ -129,7 +127,7 @@ function verificaVisibilitaEOcclusione(stato, lm, indiciRichiesti, adesso) {
     const statoRisultante = shouldReset ? createInitialState(adesso) : stato;
     return {
       ok: false,
-      result: { state: statoRisultante, event: null, primaryAngle: null, secondaryAngle: null, isTarget: false },
+      result: { state: statoRisultante, event: null, primaryAngle: null, isTarget: false },
     };
   }
 
@@ -143,7 +141,7 @@ function verificaVisibilitaEOcclusione(stato, lm, indiciRichiesti, adesso) {
  * @param {Object} stato - Current state of the squat session.
  * @param {Array} landmarks - Pose landmarks detected by MediaPipe.
  * @param {'LEFT'|'RIGHT'} lato - Side of the body used for landmark selection.
- * @returns {Object} - Updated state, event, angles, and target flag.
+ * @returns {Object} - Updated state, event, primary angle, and target flag.
  */
 export function processSquat(stato, landmarks, lato, timestampMs = performance.now()) {
   const cfg = ESERCIZI.SQUAT.thresholds;
@@ -161,8 +159,7 @@ export function processSquat(stato, landmarks, lato, timestampMs = performance.n
   let evento = null;
 
   if (adesso < m.cooldownUntil) {
-    stato.lastAngle = angoloGinocchio;
-    return { state: stato, event: null, primaryAngle: angoloGinocchio, secondaryAngle: stato.smoothedSecondary, isTarget: m.deepEnough };
+    return { state: stato, event: null, primaryAngle: angoloGinocchio, isTarget: m.deepEnough };
   }
 
   m.lowestKneeAngle = Math.min(m.lowestKneeAngle ?? 180, angoloGinocchio);
@@ -192,7 +189,7 @@ export function processSquat(stato, landmarks, lato, timestampMs = performance.n
         m.deepEnough = false;
         m.lowestKneeAngle = 180;
         stato.lastAngleHistory = [];
-        return { state: stato, event: null, primaryAngle: angoloGinocchio, secondaryAngle: stato.smoothedSecondary, isTarget: false };
+        return { state: stato, event: null, primaryAngle: angoloGinocchio, isTarget: false };
       }
 
       evento = m.deepEnough
@@ -207,8 +204,7 @@ export function processSquat(stato, landmarks, lato, timestampMs = performance.n
     }
   }
 
-  stato.lastAngle = angoloGinocchio;
-  return { state: stato, event: evento, primaryAngle: angoloGinocchio, secondaryAngle: stato.smoothedSecondary, isTarget: m.deepEnough };
+  return { state: stato, event: evento, primaryAngle: angoloGinocchio, isTarget: m.deepEnough };
 }
 
 /**
@@ -216,26 +212,23 @@ export function processSquat(stato, landmarks, lato, timestampMs = performance.n
  * @param {Object} stato - Current state of the deadlift session.
  * @param {Array} landmarks - Pose landmarks detected by MediaPipe.
  * @param {'LEFT'|'RIGHT'} lato - Side of the body used for landmark selection.
- * @returns {Object} - Updated state, event, angles, and target flag.
+ * @returns {Object} - Updated state, event, primary angle, and target flag.
  */
 export function processDeadlift(stato, landmarks, lato, timestampMs = performance.now()) {
   const cfg = ESERCIZI.DEADLIFT.thresholds;
-  const { shoulder: idxSpalla, hip, knee, ankle } = ESERCIZI.DEADLIFT.landmarks[lato];
+  const { shoulder: idxSpalla, hip, knee } = ESERCIZI.DEADLIFT.landmarks[lato];
   const lm = landmarks;
   const adesso = timestampMs;
   if (stato.lastActiveTime === null) stato.lastActiveTime = adesso;
-  const guardia = verificaVisibilitaEOcclusione(stato, lm, [hip, knee, ankle], adesso);
+  const guardia = verificaVisibilitaEOcclusione(stato, lm, [hip, knee], adesso);
   if (!guardia.ok) return guardia.result;
 
   const spallaLm = getShoulderLandmark(lm, idxSpalla, lm[hip]);
-  const ginocchioGrezzo = calculateAngle(lm[hip], lm[knee], lm[ankle]);
   const ancaGrezza = calculateAngle(spallaLm, lm[hip], lm[knee]);
 
   stato.smoothedPrimary = smoothAngle(stato.smoothedPrimary, ancaGrezza);
-  stato.smoothedSecondary = smoothAngle(stato.smoothedSecondary, ginocchioGrezzo);
 
   const angoloAnca = stato.smoothedPrimary;
-  const angoloGinocchio = stato.smoothedSecondary;
   const m = stato.metrics;
 
   const lockoutAnca = (cfg.erectHip || 165) - 20;
@@ -245,12 +238,11 @@ export function processDeadlift(stato, landmarks, lato, timestampMs = performanc
   let evento = null;
 
   if (adesso < m.cooldownUntil) {
-    stato.lastAngle = angoloAnca;
-    return { state: stato, event: null, primaryAngle: angoloAnca, secondaryAngle: angoloGinocchio, isTarget: m.targetReached || eretto };
+    return { state: stato, event: null, primaryAngle: angoloAnca, isTarget: m.targetReached || eretto };
   }
 
   if (stato.movementState === 'STANDING') {
-    if (!eretto && angoloAnca < lockoutAnca - 15) {
+    if (angoloAnca < lockoutAnca - 15) {
       stato.movementState = 'SETUP';
       stato.lastAngleHistory = [];
       m.targetReached = false;
@@ -271,8 +263,7 @@ export function processDeadlift(stato, landmarks, lato, timestampMs = performanc
     }
   }
 
-  stato.lastAngle = angoloAnca;
-  return { state: stato, event: evento, primaryAngle: angoloAnca, secondaryAngle: angoloGinocchio, isTarget: m.targetReached || eretto };
+  return { state: stato, event: evento, primaryAngle: angoloAnca, isTarget: m.targetReached || eretto };
 }
 
 /**
@@ -280,7 +271,7 @@ export function processDeadlift(stato, landmarks, lato, timestampMs = performanc
  * @param {Object} stato - Current state of the overhead press session.
  * @param {Array} landmarks - Pose landmarks detected by MediaPipe.
  * @param {'LEFT'|'RIGHT'} lato - Side of the body used for landmark selection.
- * @returns {Object} - Updated state, event, angles, and target flag.
+ * @returns {Object} - Updated state, event, primary angle, and target flag.
  */
 export function processOverheadPress(stato, landmarks, lato, timestampMs = performance.now()) {
   const cfg = ESERCIZI.OVERHEAD_PRESS.thresholds;
@@ -296,30 +287,21 @@ export function processOverheadPress(stato, landmarks, lato, timestampMs = perfo
       state: statoRisultante,
       event: null,
       primaryAngle: null,
-      secondaryAngle: null,
       isTarget: false,
     };
   }
 
-  const { shoulder: idxSpalla, elbow: idxGomito, wrist, hip } = ESERCIZI.OVERHEAD_PRESS.landmarks[lato];
+  const { shoulder: idxSpalla, elbow: idxGomito, wrist } = ESERCIZI.OVERHEAD_PRESS.landmarks[lato];
   const guardia = verificaVisibilitaEOcclusione(stato, lm, [idxSpalla, idxGomito, wrist], adesso);
   if (!guardia.ok) return guardia.result;
 
   const gomitoGrezzo = calculateAngle(lm[idxSpalla], lm[idxGomito], lm[wrist]);
   stato.smoothedPrimary = smoothAngle(stato.smoothedPrimary, gomitoGrezzo);
   const angoloGomito = stato.smoothedPrimary;
-  const anca = lm[hip];
-  if (anca?.visibility > ENGINE.VISIBILITY_THRESHOLD) {
-    const verticale = { x: lm[idxSpalla].x, y: lm[idxSpalla].y - 0.1 };
-    const troncoGrezzo = calculateAngle(verticale, lm[idxSpalla], anca);
-    stato.smoothedSecondary = smoothAngle(stato.smoothedSecondary, troncoGrezzo);
-  }
-  const angoloTronco = stato.smoothedSecondary;
   let evento = null;
 
   if (adesso < m.cooldownUntil) {
-    stato.lastAngle = angoloGomito;
-    return { state: stato, event: null, primaryAngle: angoloGomito, secondaryAngle: angoloTronco, isTarget: angoloGomito > cfg.topElbow };
+    return { state: stato, event: null, primaryAngle: angoloGomito, isTarget: angoloGomito > cfg.topElbow };
   }
 
   m.lowestElbowAngle = Math.min(m.lowestElbowAngle ?? 180, angoloGomito);
@@ -329,7 +311,6 @@ export function processOverheadPress(stato, landmarks, lato, timestampMs = perfo
       stato.movementState = 'DESCENDING';
       m.lowestElbowAngle = angoloGomito;
       stato.lastAngleHistory = [];
-      m.targetReached = false;
     }
   }
   else if (stato.movementState === 'DESCENDING') {
@@ -344,8 +325,7 @@ export function processOverheadPress(stato, landmarks, lato, timestampMs = perfo
         stato.movementState = 'STANDING';
         m.lowestElbowAngle = 180;
         stato.lastAngleHistory = [];
-        stato.lastAngle = angoloGomito;
-        return { state: stato, event: null, primaryAngle: angoloGomito, secondaryAngle: angoloTronco, isTarget: false };
+        return { state: stato, event: null, primaryAngle: angoloGomito, isTarget: false };
       }
 
       evento = { type: 'VALID_REP', faults: [] };
@@ -354,12 +334,10 @@ export function processOverheadPress(stato, landmarks, lato, timestampMs = perfo
       m.lowestElbowAngle = 180;
       stato.lastAngleHistory = [];
       m.cooldownUntil = adesso + cfg.cooldownMs;
-      m.targetReached = true;
     }
   }
 
-  stato.lastAngle = angoloGomito;
-  return { state: stato, event: evento, primaryAngle: angoloGomito, secondaryAngle: angoloTronco, isTarget: angoloGomito > cfg.topElbow };
+  return { state: stato, event: evento, primaryAngle: angoloGomito, isTarget: angoloGomito > cfg.topElbow };
 }
 
 export function processFrame(esercizio, stato, landmarks, lato, timestampMs = performance.now()) {

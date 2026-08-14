@@ -1,5 +1,3 @@
-// Biomechanical thresholds stay centralized so the FSM contains no hidden constants.
-
 export const ESERCIZI = {
   SQUAT: {
     thresholds: {
@@ -13,7 +11,7 @@ export const ESERCIZI = {
   },
   DEADLIFT: {
     thresholds: {
-      erectKnee: 165, erectHip: 165,
+      erectHip: 165,
       cooldownMs: 1500,
     },
     landmarks: {
