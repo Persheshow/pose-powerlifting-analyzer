@@ -308,17 +308,17 @@ export function processOverheadPress(stato, landmarks, lato, timestampMs = perfo
 
   if (stato.movementState === 'STANDING') {
     if (angoloGomito < cfg.bottomElbow) {
-      stato.movementState = 'DESCENDING';
+      stato.movementState = 'BOTTOM';
       m.lowestElbowAngle = angoloGomito;
       stato.lastAngleHistory = [];
     }
   }
-  else if (stato.movementState === 'DESCENDING') {
+  else if (stato.movementState === 'BOTTOM') {
     if (checkAscent(stato, angoloGomito)) {
-      stato.movementState = 'ASCENDING';
+      stato.movementState = 'PRESSING';
     }
   }
-  else if (stato.movementState === 'ASCENDING') {
+  else if (stato.movementState === 'PRESSING') {
     if (angoloGomito > cfg.topElbow) {
 
       if (m.lowestElbowAngle > cfg.minAttemptElbow) {
