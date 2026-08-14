@@ -16,7 +16,6 @@ async function createPoseLandmarker() {
     },
     runningMode: 'VIDEO',
     numPoses: 2,
-    smoothLandmarks: true,
     minPoseDetectionConfidence: 0.6,
     minPosePresenceConfidence: 0.6,
     minTrackingConfidence: 0.65
