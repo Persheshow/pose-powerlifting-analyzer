@@ -1,6 +1,6 @@
 # Powerlifting & Computer Vision
 
-Applicazione web per l'analisi cinematica nel browser e il riconoscimento automatico delle ripetizioni di squat, stacco da terra e distensione sopra la testa.
+Applicazione web per l'analisi cinematica nel browser e il riconoscimento automatico delle ripetizioni di squat, stacco da terra e pressa militare.
 I frame vengono elaborati localmente con MediaPipe Pose Landmarker e non sono inviati a server esterni.
 
 ![Anteprima dell'applicazione](./docs/screenshot.png)

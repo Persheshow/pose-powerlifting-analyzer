@@ -23,14 +23,14 @@ const INFO_ESERCIZI = {
     videoSrc: '/assets/DeadliftDemo.mp4',
     fonteVideo: ' BodyFix Method - Get Your Life Back: Move Pain Free',
     linkVideo: 'https://www.youtube.com/watch?v=GKtFw2Egc3Y',
-    descrizione: 'L\'alzata è valida al raggiungimento della completa estensione di anche e ginocchia. È causa di invalidazione la discesa del bilanciere durante la fase di tirata.'
+    descrizione: 'L\'alzata viene conteggiata quando l\'anca torna in estensione. Il sistema non valuta la traiettoria del bilanciere; i tentativi incompleti vengono ignorati.'
   },
   OVERHEAD_PRESS: {
     titolo: 'Esecuzione Pressa Militare',
     videoSrc: '/assets/OverheadPressDemo.mp4',
     fonteVideo: 'Brian DeBaets',
     linkVideo: 'https://www.youtube.com/watch?v=bV21SQgC364',
-    descrizione: 'Il movimento è validato dalla completa estensione del gomito. La discesa del bilanciere durante la fase di spinta è causa di invalidazione dell\'alzata.'
+    descrizione: 'Il movimento viene conteggiato quando, dopo una flessione sufficiente del gomito, il braccio torna in estensione. Il sistema non valuta la traiettoria del bilanciere; i tentativi incompleti vengono ignorati.'
   }
 };
 
