@@ -1,3 +1,8 @@
+
+![React](https://img.shields.io/badge/react-%2320232a.svg?style=for-the-badge&logo=react&logoColor=%2361DAFB)
+![Vite](https://img.shields.io/badge/vite-%23646CFF.svg?style=for-the-badge&logo=vite&logoColor=white)
+![MediaPipe](https://img.shields.io/badge/MediaPipe-00B4D8?style=for-the-badge)
+
 # Powerlifting & Computer Vision
 
 Applicazione web per l'analisi cinematica nel browser e il riconoscimento automatico delle ripetizioni di squat, stacco da terra e pressa militare.
